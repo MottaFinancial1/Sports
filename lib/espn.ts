@@ -182,8 +182,9 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
   const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard`
   try {
     const res = await fetch(url, {
-      // Refresh every 5 minutes; the endpoint tracks the current day itself.
-      next: { revalidate: 300 },
+      // Refresh every 60s so live scores stay current; the endpoint tracks
+      // the current day itself, so the slate rolls over automatically.
+      next: { revalidate: 60 },
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     })
     if (!res.ok) return []

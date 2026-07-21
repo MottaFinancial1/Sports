@@ -1,9 +1,12 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import useSWR from "swr"
 import { CalendarDays, Clock, Flame, RefreshCw, Sunrise, Sun, Moon, Trophy } from "lucide-react"
 import { GameCard } from "@/components/game-card"
-import { LEAGUES, type Game, type LeagueCategory } from "@/lib/espn"
+import { LEAGUES, type Game, type LeagueCategory, type SportsData } from "@/lib/espn"
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
 const CATEGORY_ORDER: LeagueCategory[] = [
   "Baseball",
@@ -22,7 +25,20 @@ function greetingForHour(hour: number) {
   return { text: "Good evening", Icon: Moon }
 }
 
-export function SportsGuide({ games, fetchedAt }: { games: Game[]; fetchedAt: string }) {
+export function SportsGuide({ games: initialGames, fetchedAt: initialFetchedAt }: { games: Game[]; fetchedAt: string }) {
+  // Poll for fresh data every 60s, revalidate when the tab regains focus or
+  // the network reconnects, and keep polling in background tabs. The
+  // server-rendered payload seeds the cache so there is never a blank state.
+  const { data } = useSWR<SportsData>("/api/games", fetcher, {
+    fallbackData: { games: initialGames, fetchedAt: initialFetchedAt },
+    refreshInterval: 60_000,
+    refreshWhenHidden: true,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+  })
+  const games = data?.games ?? initialGames
+  const fetchedAt = data?.fetchedAt ?? initialFetchedAt
+
   const [filter, setFilter] = useState<Filter>("all")
   const [today, setToday] = useState<string>("")
   const [updated, setUpdated] = useState<string>("")
