@@ -23,6 +23,9 @@ export interface LeagueConfig {
 
 export const LEAGUES: LeagueConfig[] = [
   { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "baseball/mlb" },
+  // Triple-A (Gwinnett Stripers) comes from the MLB Stats API, not ESPN —
+  // path is unused; getTodaysGames routes this id to fetchStripers().
+  { id: "aaa", label: "Triple-A", shortLabel: "AAA", category: "Baseball", path: "" },
   { id: "epl", label: "Premier League", shortLabel: "EPL", category: "Soccer", path: "soccer/eng.1" },
   {
     id: "ucl",
@@ -222,13 +225,123 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
   }
 }
 
+// ---------- Gwinnett Stripers (Triple-A) via the MLB Stats API ----------
+
+const STRIPERS_TEAM_ID = 431 // Gwinnett Stripers, International League (AAA)
+
+interface StatsApiGame {
+  gamePk: number
+  gameDate?: string
+  status?: { abstractGameState?: string; detailedState?: string }
+  teams?: {
+    away?: StatsApiSide
+    home?: StatsApiSide
+  }
+  linescore?: { currentInningOrdinal?: string; inningState?: string }
+  broadcasts?: { name?: string; callSign?: string }[]
+  venue?: { name?: string }
+}
+
+interface StatsApiSide {
+  team?: { id?: number; name?: string; teamName?: string; abbreviation?: string }
+  leagueRecord?: { wins?: number; losses?: number }
+  score?: number
+  probablePitcher?: { fullName?: string }
+}
+
+function mapStatsApiState(abstract?: string): GameState {
+  if (abstract === "Live") return "in"
+  if (abstract === "Final") return "post"
+  return "pre"
+}
+
+function mapStatsApiSide(side: StatsApiSide | undefined, isHome: boolean, won?: boolean): Competitor {
+  const record =
+    side?.leagueRecord?.wins !== undefined && side?.leagueRecord?.losses !== undefined
+      ? `${side.leagueRecord.wins}-${side.leagueRecord.losses}`
+      : undefined
+  const pitcherName = side?.probablePitcher?.fullName
+  return {
+    name: side?.team?.name ?? "TBD",
+    shortName: side?.team?.teamName ?? side?.team?.abbreviation ?? "TBD",
+    logo: side?.team?.id ? `https://www.mlbstatic.com/team-logos/${side.team.id}.svg` : undefined,
+    score: side?.score !== undefined ? String(side.score) : undefined,
+    isHome,
+    winner: won,
+    record,
+    probablePitcher: pitcherName ? { name: pitcherName, shortName: pitcherName } : undefined,
+  }
+}
+
+async function fetchStripers(): Promise<Game[]> {
+  // No date param: the schedule endpoint defaults to today, so it rolls over
+  // to the new day automatically, same as the ESPN scoreboards.
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STRIPERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 60 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as { dates?: { games?: StatsApiGame[] }[] }
+    const games: Game[] = []
+    for (const date of data.dates ?? []) {
+      for (const g of date.games ?? []) {
+        const state = mapStatsApiState(g.status?.abstractGameState)
+        const awayScore = g.teams?.away?.score
+        const homeScore = g.teams?.home?.score
+        const awayWon = state === "post" && awayScore !== undefined && homeScore !== undefined && awayScore > homeScore
+        const homeWon = state === "post" && awayScore !== undefined && homeScore !== undefined && homeScore > awayScore
+        const away = mapStatsApiSide(g.teams?.away, false, state === "post" ? awayWon : undefined)
+        const home = mapStatsApiSide(g.teams?.home, true, state === "post" ? homeWon : undefined)
+        const statusDetail =
+          state === "in" && g.linescore?.currentInningOrdinal
+            ? `${g.linescore.inningState ?? ""} ${g.linescore.currentInningOrdinal}`.trim()
+            : (g.status?.detailedState ?? "")
+        const broadcasts = Array.from(
+          new Set((g.broadcasts ?? []).map((b) => b.name ?? b.callSign).filter((n): n is string => Boolean(n))),
+        )
+        games.push({
+          id: `aaa-${g.gamePk}`,
+          leagueId: "aaa",
+          leagueLabel: "Triple-A",
+          leagueShort: "AAA",
+          category: "Baseball",
+          name: `${away.name} at ${home.name}`,
+          shortName: `${away.shortName} @ ${home.shortName}`,
+          date: g.gameDate ?? "",
+          state,
+          statusDetail,
+          competitors: [away, home],
+          broadcasts,
+          venue: g.venue?.name,
+        })
+      }
+    }
+    return games
+  } catch {
+    return []
+  }
+}
+
+// ---------- Favorites ----------
+
+// Games featuring these teams are pinned in a Favorites section at the top.
+export const FAVORITE_TEAMS = ["Los Angeles Angels", "Boston Red Sox", "Gwinnett Stripers"]
+
+export function isFavoriteGame(game: Game): boolean {
+  return game.competitors.some((c) => FAVORITE_TEAMS.some((fav) => c.name.includes(fav) || fav.includes(c.name)))
+}
+
 export interface SportsData {
   games: Game[]
   fetchedAt: string
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const results = await Promise.all(LEAGUES.map(fetchLeague))
+  const results = await Promise.all(
+    LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league))),
+  )
   const games = results.flat()
   return { games, fetchedAt: new Date().toISOString() }
 }

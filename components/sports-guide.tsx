@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { CalendarDays, Clock, Flame, RefreshCw, Sunrise, Sun, Moon, Trophy } from "lucide-react"
+import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
 import { GameCard } from "@/components/game-card"
-import { LEAGUES, type Game, type LeagueCategory, type SportsData } from "@/lib/espn"
+import { LEAGUES, isFavoriteGame, type Game, type LeagueCategory, type SportsData } from "@/lib/espn"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
@@ -75,9 +75,16 @@ export function SportsGuide({ games: initialGames, fetchedAt: initialFetchedAt }
     return LEAGUES.filter((l) => ids.has(l.id))
   }, [games])
 
+  const favoriteGames = useMemo(
+    () =>
+      games.filter(isFavoriteGame).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [games],
+  )
+
   const filtered = useMemo(() => {
     if (filter === "all") return games
     if (filter === "live") return games.filter((g) => g.state === "in")
+    if (filter === "favorites") return games.filter(isFavoriteGame)
     return games.filter((g) => g.leagueId === filter)
   }, [games, filter])
 
@@ -151,12 +158,31 @@ export function SportsGuide({ games: initialGames, fetchedAt: initialFetchedAt }
         <FilterChip active={filter === "live"} onClick={() => setFilter("live")} highlight={liveCount > 0}>
           Live ({liveCount})
         </FilterChip>
+        {favoriteGames.length > 0 ? (
+          <FilterChip active={filter === "favorites"} onClick={() => setFilter("favorites")}>
+            Favorites ({favoriteGames.length})
+          </FilterChip>
+        ) : null}
         {activeLeagues.map((l) => (
           <FilterChip key={l.id} active={filter === l.id} onClick={() => setFilter(l.id)}>
             {l.shortLabel}
           </FilterChip>
         ))}
       </nav>
+
+      {filter === "all" && favoriteGames.length > 0 ? (
+        <section className="mb-10">
+          <h2 className="mb-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-primary">
+            <Star className="h-3.5 w-3.5 fill-primary" aria-hidden="true" />
+            Favorite Teams
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {favoriteGames.map((g) => (
+              <GameCard key={`fav-${g.id}`} game={g} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {grouped.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
