@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { Radio, Tv } from "lucide-react"
-import type { Game } from "@/lib/espn"
+import type { Game, ProbablePitcher } from "@/lib/espn"
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   const [label, setLabel] = useState<string>("")
@@ -35,6 +35,7 @@ function TeamRow({
   record,
   winner,
   showScore,
+  pitcher,
 }: {
   name: string
   short: string
@@ -43,29 +44,43 @@ function TeamRow({
   record?: string
   winner?: boolean
   showScore: boolean
+  pitcher?: ProbablePitcher
 }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex min-w-0 items-center gap-2.5">
-        {logo ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={logo || "/placeholder.svg"} alt="" className="h-6 w-6 shrink-0 object-contain" />
-        ) : (
-          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
-            {short.slice(0, 2).toUpperCase()}
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo || "/placeholder.svg"} alt="" className="h-6 w-6 shrink-0 object-contain" />
+          ) : (
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+              {short.slice(0, 2).toUpperCase()}
+            </span>
+          )}
+          <span
+            className={`truncate text-sm ${winner ? "font-bold text-foreground" : "font-medium text-foreground"}`}
+          >
+            {name}
           </span>
-        )}
-        <span
-          className={`truncate text-sm ${winner ? "font-bold text-foreground" : "font-medium text-foreground"}`}
-        >
-          {name}
-        </span>
-        {record ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{record}</span> : null}
+          {record ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{record}</span> : null}
+        </div>
+        {showScore && score !== undefined ? (
+          <span className={`shrink-0 text-sm tabular-nums ${winner ? "font-bold" : "font-medium"} text-foreground`}>
+            {score}
+          </span>
+        ) : null}
       </div>
-      {showScore && score !== undefined ? (
-        <span className={`shrink-0 text-sm tabular-nums ${winner ? "font-bold" : "font-medium"} text-foreground`}>
-          {score}
-        </span>
+      {pitcher ? (
+        <p className="truncate pl-8.5 text-xs text-muted-foreground">
+          <span className="font-semibold text-foreground/80">{pitcher.name}</span>
+          {pitcher.record || pitcher.era ? (
+            <span>
+              {" "}
+              ({[pitcher.record, pitcher.era ? `${pitcher.era} ERA` : undefined].filter(Boolean).join(", ")})
+            </span>
+          ) : null}
+        </p>
       ) : null}
     </div>
   )
@@ -106,6 +121,7 @@ export function GameCard({ game }: { game: Game }) {
               record={c.record}
               winner={c.winner}
               showScore={showScore}
+              pitcher={game.state === "pre" ? c.probablePitcher : undefined}
             />
           ))}
         </div>

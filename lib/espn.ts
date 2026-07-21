@@ -54,6 +54,13 @@ export const LEAGUES: LeagueConfig[] = [
   { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Combat & Motorsport", path: "racing/f1" },
 ]
 
+export interface ProbablePitcher {
+  name: string
+  shortName: string
+  record?: string // e.g. "10-1"
+  era?: string // e.g. "2.13"
+}
+
 export interface Competitor {
   name: string
   shortName: string
@@ -62,6 +69,7 @@ export interface Competitor {
   isHome: boolean
   winner?: boolean
   record?: string
+  probablePitcher?: ProbablePitcher
 }
 
 export type GameState = "pre" | "in" | "post"
@@ -105,6 +113,12 @@ interface EspnCompetition {
   competitors?: EspnCompetitor[]
 }
 
+interface EspnProbable {
+  abbreviation?: string
+  athlete?: { displayName?: string; shortName?: string }
+  statistics?: { abbreviation?: string; displayValue?: string }[]
+}
+
 interface EspnCompetitor {
   homeAway?: string
   winner?: boolean
@@ -112,6 +126,24 @@ interface EspnCompetitor {
   team?: { displayName?: string; shortDisplayName?: string; abbreviation?: string; logo?: string }
   athlete?: { displayName?: string; shortName?: string; flag?: { href?: string } }
   records?: { summary?: string }[]
+  probables?: EspnProbable[]
+}
+
+function mapProbablePitcher(c: EspnCompetitor): ProbablePitcher | undefined {
+  // MLB scoreboard lists the starting pitcher under `probables` (abbreviation "SP").
+  const probable = (c.probables ?? []).find((p) => p.abbreviation === "SP") ?? c.probables?.[0]
+  const name = probable?.athlete?.displayName
+  if (!name) return undefined
+  const stats = probable?.statistics ?? []
+  const stat = (abbr: string) => stats.find((s) => s.abbreviation === abbr)?.displayValue
+  const wins = stat("W")
+  const losses = stat("L")
+  return {
+    name,
+    shortName: probable?.athlete?.shortName ?? name,
+    record: wins !== undefined && losses !== undefined ? `${wins}-${losses}` : undefined,
+    era: stat("ERA"),
+  }
 }
 
 function extractBroadcasts(comp: EspnCompetition): string[] {
@@ -139,6 +171,7 @@ function mapCompetitor(c: EspnCompetitor): Competitor {
     isHome: c.homeAway === "home",
     winner: c.winner,
     record: c.records?.[0]?.summary,
+    probablePitcher: mapProbablePitcher(c),
   }
 }
 
