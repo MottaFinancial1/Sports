@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { CalendarDays, RefreshCw } from "lucide-react"
+import { CalendarDays, Clock, Flame, RefreshCw, Sunrise, Sun, Moon, Trophy } from "lucide-react"
 import { GameCard } from "@/components/game-card"
 import { LEAGUES, type Game, type LeagueCategory } from "@/lib/espn"
 
@@ -9,24 +9,42 @@ const CATEGORY_ORDER: LeagueCategory[] = ["US Leagues", "College", "Soccer", "Co
 
 type Filter = "all" | "live" | string
 
+function greetingForHour(hour: number) {
+  if (hour < 12) return { text: "Good morning", Icon: Sunrise }
+  if (hour < 17) return { text: "Good afternoon", Icon: Sun }
+  return { text: "Good evening", Icon: Moon }
+}
+
 export function SportsGuide({ games, fetchedAt }: { games: Game[]; fetchedAt: string }) {
   const [filter, setFilter] = useState<Filter>("all")
   const [today, setToday] = useState<string>("")
   const [updated, setUpdated] = useState<string>("")
+  const [greeting, setGreeting] = useState<{ text: string; Icon: typeof Sunrise } | null>(null)
+  const [nextUp, setNextUp] = useState<string>("")
 
   useEffect(() => {
+    const now = new Date()
     setToday(
-      new Date().toLocaleDateString([], {
+      now.toLocaleDateString([], {
         weekday: "long",
         month: "long",
         day: "numeric",
-        year: "numeric",
       }),
     )
     setUpdated(new Date(fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))
-  }, [fetchedAt])
+    setGreeting(greetingForHour(now.getHours()))
+
+    // Next upcoming start time from now.
+    const upcoming = games
+      .filter((g) => g.state === "pre" && new Date(g.date).getTime() > now.getTime())
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
+    setNextUp(
+      upcoming ? new Date(upcoming.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—",
+    )
+  }, [fetchedAt, games])
 
   const liveCount = useMemo(() => games.filter((g) => g.state === "in").length, [games])
+  const finalCount = useMemo(() => games.filter((g) => g.state === "post").length, [games])
 
   // Leagues that actually have games today, in a stable order.
   const activeLeagues = useMemo(() => {
@@ -61,39 +79,61 @@ export function SportsGuide({ games, fetchedAt }: { games: Game[]; fetchedAt: st
     }).filter((c) => c.leagues.length > 0)
   }, [filtered])
 
+  const GreetingIcon = greeting?.Icon ?? Sunrise
+
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
-      <header className="mb-8 flex flex-col gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto w-full max-w-5xl px-4 pb-8 sm:px-6 sm:pb-10">
+      <header className="flex flex-col gap-4 pt-6 sm:pt-8">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="font-mono text-3xl font-extrabold uppercase tracking-tight text-foreground sm:text-4xl">
-              What&apos;s On Today
+            <p className="flex items-center gap-1.5 text-sm font-medium text-primary">
+              <GreetingIcon className="h-4 w-4" aria-hidden="true" />
+              <span>{greeting?.text ?? "Hello"}</span>
+            </p>
+            <h1 className="mt-0.5 font-mono text-3xl font-extrabold uppercase tracking-tight text-foreground sm:text-4xl">
+              The Daily Slate
             </h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
               <span>{today || "Loading…"}</span>
             </p>
           </div>
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs text-secondary-foreground">
             <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Auto-updates · last synced {updated || "…"}</span>
+            <span>Auto-updates · synced {updated || "…"}</span>
           </div>
         </div>
 
-        <nav aria-label="Filter by league" className="flex flex-wrap gap-2">
-          <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
-            All ({games.length})
-          </FilterChip>
-          <FilterChip active={filter === "live"} onClick={() => setFilter("live")} highlight={liveCount > 0}>
-            Live ({liveCount})
-          </FilterChip>
-          {activeLeagues.map((l) => (
-            <FilterChip key={l.id} active={filter === l.id} onClick={() => setFilter(l.id)}>
-              {l.shortLabel}
-            </FilterChip>
-          ))}
-        </nav>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
+          <BriefingStat
+            icon={Flame}
+            label="Live now"
+            value={String(liveCount)}
+            highlight={liveCount > 0}
+            onClick={liveCount > 0 ? () => setFilter("live") : undefined}
+          />
+          <BriefingStat icon={Clock} label="Next start" value={nextUp || "…"} />
+          <BriefingStat icon={CalendarDays} label="Finished" value={String(finalCount)} />
+        </div>
       </header>
+
+      <nav
+        aria-label="Filter by league"
+        className="sticky top-0 z-10 -mx-4 mb-6 mt-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
+      >
+        <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
+          All ({games.length})
+        </FilterChip>
+        <FilterChip active={filter === "live"} onClick={() => setFilter("live")} highlight={liveCount > 0}>
+          Live ({liveCount})
+        </FilterChip>
+        {activeLeagues.map((l) => (
+          <FilterChip key={l.id} active={filter === l.id} onClick={() => setFilter(l.id)}>
+            {l.shortLabel}
+          </FilterChip>
+        ))}
+      </nav>
 
       {grouped.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
@@ -130,6 +170,50 @@ export function SportsGuide({ games, fetchedAt }: { games: Game[]; fetchedAt: st
   )
 }
 
+function BriefingStat({
+  icon: Icon,
+  label,
+  value,
+  highlight,
+  onClick,
+}: {
+  icon: typeof Trophy
+  label: string
+  value: string
+  highlight?: boolean
+  onClick?: () => void
+}) {
+  const inner = (
+    <>
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+        <Icon className={`h-3.5 w-3.5 ${highlight ? "text-destructive" : "text-primary"}`} aria-hidden="true" />
+        {label}
+      </span>
+      <span
+        className={`mt-1 font-mono text-xl font-extrabold tabular-nums ${
+          highlight ? "text-destructive" : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+    </>
+  )
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex flex-col items-start rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-left transition-colors hover:bg-destructive/10"
+      >
+        {inner}
+      </button>
+    )
+  }
+
+  return <div className="flex flex-col rounded-xl border border-border bg-card p-3">{inner}</div>
+}
+
 function FilterChip({
   active,
   highlight,
@@ -145,7 +229,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
         active
           ? "bg-primary text-primary-foreground"
           : highlight
