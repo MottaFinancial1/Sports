@@ -3,15 +3,16 @@
 // default, so this naturally rolls over to a new day. We revalidate on a
 // short interval so times/scores stay fresh and the date updates on its own.
 
-// Sports are ranked in display order: Baseball, Soccer, Football, Basketball,
-// Hockey, then Combat & Motorsport.
+// Sports are ranked in display order: Baseball, Football, Soccer, Basketball,
+// Combat & Motorsport, then Hockey and MLS together at the end.
 export type LeagueCategory =
   | "Baseball"
-  | "Soccer"
   | "Football"
+  | "Soccer"
   | "Basketball"
-  | "Hockey"
   | "Combat & Motorsport"
+  | "Hockey"
+  | "MLS"
 
 export interface LeagueConfig {
   id: string
@@ -34,7 +35,7 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Soccer",
     path: "soccer/uefa.champions",
   },
-  { id: "mls", label: "MLS", shortLabel: "MLS", category: "Soccer", path: "soccer/usa.1" },
+  { id: "mls", label: "MLS", shortLabel: "MLS", category: "MLS", path: "soccer/usa.1" },
   { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
   { id: "nfl", label: "NFL", shortLabel: "NFL", category: "Football", path: "football/nfl" },
   {
@@ -93,6 +94,7 @@ export interface Game {
   venue?: string
   note?: string
   week?: number // NFL/NCAAF week number
+  link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
 }
 
 interface EspnResponse {
@@ -106,6 +108,7 @@ interface EspnEvent {
   shortName?: string
   date?: string
   week?: { number?: number }
+  links?: { text?: string; href?: string }[]
   competitions?: EspnCompetition[]
 }
 
@@ -217,6 +220,10 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
         venue: comp.venue?.fullName,
         note: comp.notes?.[0]?.headline,
         week: isFootball ? (event.week?.number ?? data.week?.number) : undefined,
+        link:
+          (event.links ?? []).find((l) => l.text === "Gamecast")?.href ??
+          (event.links ?? []).find((l) => l.text === "Box Score")?.href ??
+          event.links?.[0]?.href,
       })
     }
     return games
@@ -315,6 +322,7 @@ async function fetchStripers(): Promise<Game[]> {
           competitors: [away, home],
           broadcasts,
           venue: g.venue?.name,
+          link: `https://www.milb.com/gameday/${g.gamePk}`,
         })
       }
     }
@@ -333,15 +341,89 @@ export function isFavoriteGame(game: Game): boolean {
   return game.competitors.some((c) => FAVORITE_TEAMS.some((fav) => c.name.includes(fav) || fav.includes(c.name)))
 }
 
+// ---------- Top sports news (ESPN news feeds) ----------
+
+export interface NewsArticle {
+  id: string
+  headline: string
+  description?: string
+  link: string
+  image?: string
+  published: string // ISO
+  source: string // league label, e.g. "MLB"
+}
+
+interface EspnNewsResponse {
+  articles?: {
+    dataSourceIdentifier?: string
+    headline?: string
+    description?: string
+    published?: string
+    links?: { web?: { href?: string } }
+    images?: { url?: string }[]
+  }[]
+}
+
+const NEWS_FEEDS: { path: string; source: string }[] = [
+  { path: "baseball/mlb", source: "MLB" },
+  { path: "football/nfl", source: "NFL" },
+  { path: "basketball/nba", source: "NBA" },
+  { path: "hockey/nhl", source: "NHL" },
+  { path: "soccer/eng.1", source: "Soccer" },
+  { path: "mma/ufc", source: "UFC" },
+]
+
+async function fetchNewsFeed(feed: { path: string; source: string }): Promise<NewsArticle[]> {
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${feed.path}/news?limit=6`
+  try {
+    const res = await fetch(url, {
+      // News moves slower than scores; refresh every 5 minutes.
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as EspnNewsResponse
+    return (data.articles ?? [])
+      .filter((a) => a.headline && a.links?.web?.href)
+      .map((a, i) => ({
+        id: a.dataSourceIdentifier ?? `${feed.source}-${i}-${a.headline}`,
+        headline: a.headline!,
+        description: a.description,
+        link: a.links!.web!.href!,
+        image: a.images?.[0]?.url,
+        published: a.published ?? "",
+        source: feed.source,
+      }))
+  } catch {
+    return []
+  }
+}
+
+export async function getTopNews(): Promise<NewsArticle[]> {
+  const results = await Promise.all(NEWS_FEEDS.map(fetchNewsFeed))
+  const seen = new Set<string>()
+  return results
+    .flat()
+    .sort((a, b) => new Date(b.published).getTime() - new Date(a.published).getTime())
+    .filter((a) => {
+      if (seen.has(a.headline)) return false
+      seen.add(a.headline)
+      return true
+    })
+    .slice(0, 8)
+}
+
 export interface SportsData {
   games: Game[]
+  news: NewsArticle[]
   fetchedAt: string
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const results = await Promise.all(
-    LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league))),
-  )
+  const [results, news] = await Promise.all([
+    Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league)))),
+    getTopNews(),
+  ])
   const games = results.flat()
-  return { games, fetchedAt: new Date().toISOString() }
+  return { games, news, fetchedAt: new Date().toISOString() }
 }

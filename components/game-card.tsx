@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Radio, Tv } from "lucide-react"
+import { ExternalLink, Radio, Tv } from "lucide-react"
 import type { Game, ProbablePitcher } from "@/lib/espn"
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
@@ -101,8 +101,8 @@ export function GameCard({ game }: { game: Game }) {
   const showScore = game.state !== "pre"
   const isEvent = game.competitors.length !== 2
 
-  return (
-    <article className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
+  const card = (
+    <article className="group flex h-full flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
           <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">
@@ -118,6 +118,12 @@ export function GameCard({ game }: { game: Game }) {
           <GameTime iso={game.date} state={game.state} />
           {game.state === "in" ? (
             <span className="text-xs font-medium text-muted-foreground">{game.statusDetail}</span>
+          ) : null}
+          {game.link ? (
+            <ExternalLink
+              className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-colors group-hover:text-primary"
+              aria-hidden="true"
+            />
           ) : null}
         </div>
       </div>
@@ -168,4 +174,20 @@ export function GameCard({ game }: { game: Game }) {
       </div>
     </article>
   )
+
+  if (game.link) {
+    return (
+      <a
+        href={game.link}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`${game.shortName || game.name} — open live stats and box score`}
+        className="rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+      >
+        {card}
+      </a>
+    )
+  }
+
+  return card
 }
