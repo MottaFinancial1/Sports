@@ -7,9 +7,9 @@ const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'The Daily Slate — Your Morning Sports Briefing',
+  title: 'Sports Slate — Live Scores & How to Watch',
   description:
-    "Check in each morning and throughout the day: every game across the NFL, NBA, MLB, NHL, college, soccer, UFC and F1 — start times, live scores, and the channels and streaming services to watch them on.",
+    "Today's slate ranked by sport — baseball, soccer, football, basketball, hockey, and more — with live scores, start times, and the channels and streaming services to watch on.",
   generator: 'v0.app',
   icons: {
     icon: [

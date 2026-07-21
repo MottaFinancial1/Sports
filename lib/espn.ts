@@ -3,7 +3,15 @@
 // default, so this naturally rolls over to a new day. We revalidate on a
 // short interval so times/scores stay fresh and the date updates on its own.
 
-export type LeagueCategory = "US Leagues" | "College" | "Soccer" | "Combat & Motorsport"
+// Sports are ranked in display order: Baseball, Soccer, Football, Basketball,
+// Hockey, then Combat & Motorsport.
+export type LeagueCategory =
+  | "Baseball"
+  | "Soccer"
+  | "Football"
+  | "Basketball"
+  | "Hockey"
+  | "Combat & Motorsport"
 
 export interface LeagueConfig {
   id: string
@@ -14,24 +22,7 @@ export interface LeagueConfig {
 }
 
 export const LEAGUES: LeagueConfig[] = [
-  { id: "nfl", label: "NFL", shortLabel: "NFL", category: "US Leagues", path: "football/nfl" },
-  { id: "nba", label: "NBA", shortLabel: "NBA", category: "US Leagues", path: "basketball/nba" },
-  { id: "mlb", label: "MLB", shortLabel: "MLB", category: "US Leagues", path: "baseball/mlb" },
-  { id: "nhl", label: "NHL", shortLabel: "NHL", category: "US Leagues", path: "hockey/nhl" },
-  {
-    id: "ncaaf",
-    label: "College Football",
-    shortLabel: "NCAAF",
-    category: "College",
-    path: "football/college-football",
-  },
-  {
-    id: "ncaam",
-    label: "College Basketball",
-    shortLabel: "NCAAM",
-    category: "College",
-    path: "basketball/mens-college-basketball",
-  },
+  { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "baseball/mlb" },
   { id: "epl", label: "Premier League", shortLabel: "EPL", category: "Soccer", path: "soccer/eng.1" },
   {
     id: "ucl",
@@ -42,6 +33,23 @@ export const LEAGUES: LeagueConfig[] = [
   },
   { id: "mls", label: "MLS", shortLabel: "MLS", category: "Soccer", path: "soccer/usa.1" },
   { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
+  { id: "nfl", label: "NFL", shortLabel: "NFL", category: "Football", path: "football/nfl" },
+  {
+    id: "ncaaf",
+    label: "College Football",
+    shortLabel: "NCAAF",
+    category: "Football",
+    path: "football/college-football",
+  },
+  { id: "nba", label: "NBA", shortLabel: "NBA", category: "Basketball", path: "basketball/nba" },
+  {
+    id: "ncaam",
+    label: "College Basketball",
+    shortLabel: "NCAAM",
+    category: "Basketball",
+    path: "basketball/mens-college-basketball",
+  },
+  { id: "nhl", label: "NHL", shortLabel: "NHL", category: "Hockey", path: "hockey/nhl" },
   { id: "ufc", label: "UFC", shortLabel: "UFC", category: "Combat & Motorsport", path: "mma/ufc" },
   { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Combat & Motorsport", path: "racing/f1" },
 ]

@@ -5,7 +5,14 @@ import { CalendarDays, Clock, Flame, RefreshCw, Sunrise, Sun, Moon, Trophy } fro
 import { GameCard } from "@/components/game-card"
 import { LEAGUES, type Game, type LeagueCategory } from "@/lib/espn"
 
-const CATEGORY_ORDER: LeagueCategory[] = ["US Leagues", "College", "Soccer", "Combat & Motorsport"]
+const CATEGORY_ORDER: LeagueCategory[] = [
+  "Baseball",
+  "Soccer",
+  "Football",
+  "Basketball",
+  "Hockey",
+  "Combat & Motorsport",
+]
 
 type Filter = "all" | "live" | string
 
@@ -91,7 +98,7 @@ export function SportsGuide({ games, fetchedAt }: { games: Game[]; fetchedAt: st
               <span>{greeting?.text ?? "Hello"}</span>
             </p>
             <h1 className="mt-0.5 font-mono text-3xl font-extrabold uppercase tracking-tight text-foreground sm:text-4xl">
-              The Daily Slate
+              Sports Slate
             </h1>
             <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="h-4 w-4" aria-hidden="true" />
