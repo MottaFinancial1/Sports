@@ -89,10 +89,12 @@ export interface Game {
   broadcasts: string[]
   venue?: string
   note?: string
+  week?: number // NFL/NCAAF week number
 }
 
 interface EspnResponse {
   events?: EspnEvent[]
+  week?: { number?: number }
 }
 
 interface EspnEvent {
@@ -100,6 +102,7 @@ interface EspnEvent {
   name?: string
   shortName?: string
   date?: string
+  week?: { number?: number }
   competitions?: EspnCompetition[]
 }
 
@@ -185,6 +188,7 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
     })
     if (!res.ok) return []
     const data = (await res.json()) as EspnResponse
+    const isFootball = league.id === "nfl" || league.id === "ncaaf"
     const games: Game[] = []
     for (const event of data.events ?? []) {
       const comp = event.competitions?.[0]
@@ -208,6 +212,7 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
         broadcasts: extractBroadcasts(comp),
         venue: comp.venue?.fullName,
         note: comp.notes?.[0]?.headline,
+        week: isFootball ? (event.week?.number ?? data.week?.number) : undefined,
       })
     }
     return games

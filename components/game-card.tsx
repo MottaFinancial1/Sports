@@ -6,6 +6,7 @@ import type { Game, ProbablePitcher } from "@/lib/espn"
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   const [label, setLabel] = useState<string>("")
+  const [dateLabel, setDateLabel] = useState<string>("")
 
   useEffect(() => {
     if (!iso) return
@@ -16,6 +17,11 @@ function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
         minute: "2-digit",
       }),
     )
+    // For games not on today's local date (future events), show the date too.
+    const now = new Date()
+    const isToday =
+      d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+    setDateLabel(isToday ? "" : d.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }))
   }, [iso])
 
   if (state === "in") {
@@ -24,7 +30,12 @@ function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   if (state === "post") {
     return <span className="text-sm font-semibold text-muted-foreground">Final</span>
   }
-  return <span className="text-sm font-bold tabular-nums text-foreground">{label || "--"}</span>
+  return (
+    <span className="text-sm font-bold tabular-nums text-foreground">
+      {dateLabel ? <span className="font-semibold text-muted-foreground">{dateLabel} · </span> : null}
+      {label || "--"}
+    </span>
+  )
 }
 
 function TeamRow({
@@ -93,9 +104,16 @@ export function GameCard({ game }: { game: Game }) {
   return (
     <article className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
       <div className="flex items-center justify-between gap-2">
-        <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">
-          {game.leagueShort}
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">
+            {game.leagueShort}
+          </span>
+          {game.week !== undefined ? (
+            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+              Week {game.week}
+            </span>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2">
           <GameTime iso={game.date} state={game.state} />
           {game.state === "in" ? (
