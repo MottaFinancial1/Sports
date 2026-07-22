@@ -5,6 +5,7 @@ import useSWR from "swr"
 import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
+import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
 import { StarPerformers } from "@/components/star-performers"
 import {
   LEAGUES,
@@ -110,28 +111,45 @@ export function SportsGuide({
     if (filter === "all") return games
     if (filter === "live") return games.filter((g) => g.state === "in")
     if (filter === "favorites") return games.filter(isFavoriteGame)
+    if (filter.startsWith("cat:")) return games.filter((g) => g.category === filter.slice(4))
     return games.filter((g) => g.leagueId === filter)
   }, [games, filter])
 
-  // Sort games by start time within each league.
+  // Sort games by start time within each league, then order categories by
+  // activity (live first, then starting soon, then scheduled, idle last),
+  // with ties broken by personal priority. The homepage reshapes itself
+  // around whatever sports are actually in action.
   const grouped = useMemo(() => {
     const byLeague = new Map<string, Game[]>()
+    const byCategory = new Map<LeagueCategory, Game[]>()
     for (const g of filtered) {
       const arr = byLeague.get(g.leagueId) ?? []
       arr.push(g)
       byLeague.set(g.leagueId, arr)
+      const catArr = byCategory.get(g.category) ?? []
+      catArr.push(g)
+      byCategory.set(g.category, catArr)
     }
     for (const arr of byLeague.values()) {
       arr.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
     }
 
-    return CATEGORY_ORDER.map((category) => {
-      const leaguesInCat = LEAGUES.filter((l) => l.category === category && byLeague.has(l.id))
-      return {
-        category,
-        leagues: leaguesInCat.map((l) => ({ league: l, games: byLeague.get(l.id)! })),
-      }
-    }).filter((c) => c.leagues.length > 0)
+    const ordered = orderCategories(
+      Array.from(byCategory, ([category, gs]) => ({ category, games: gs })),
+      CATEGORY_ORDER,
+      Date.now(),
+    )
+
+    return ordered
+      .map(({ category, status }) => {
+        const leaguesInCat = LEAGUES.filter((l) => l.category === category && byLeague.has(l.id))
+        return {
+          category,
+          status,
+          leagues: leaguesInCat.map((l) => ({ league: l, games: byLeague.get(l.id)! })),
+        }
+      })
+      .filter((c) => c.leagues.length > 0)
   }, [filtered])
 
   const GreetingIcon = greeting?.Icon ?? Sunrise
@@ -198,6 +216,14 @@ export function SportsGuide({
         ))}
       </nav>
 
+      {filter === "all" ? (
+        <SportSpotlight
+          games={games}
+          priority={CATEGORY_ORDER}
+          onFilterLeague={(category) => setFilter(`cat:${category}`)}
+        />
+      ) : null}
+
       {filter === "all" ? <SportsNews articles={news} /> : null}
 
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
@@ -226,11 +252,15 @@ export function SportsGuide({
         </div>
       ) : (
         <div className="flex flex-col gap-10">
-          {grouped.map(({ category, leagues }) => (
-            <section key={category}>
+          {grouped.map(({ category, status, leagues }) => (
+            <section key={category} className={status === "done" || status === "scheduled" ? "opacity-75" : ""}>
               <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                <span className="inline-block h-3 w-1 bg-primary" aria-hidden="true" />
+                <span
+                  className={`inline-block h-3 w-1 ${status === "live" ? "bg-destructive" : "bg-primary"}`}
+                  aria-hidden="true"
+                />
                 {category}
+                <CategoryBadge status={status} />
                 <span className="h-px flex-1 bg-border" aria-hidden="true" />
               </h2>
               <div className="flex flex-col gap-6">
@@ -256,6 +286,32 @@ export function SportsGuide({
       )}
     </div>
   )
+}
+
+function CategoryBadge({ status }: { status: CategoryStatus }) {
+  if (status === "live") {
+    return (
+      <span className="flex items-center gap-1 rounded-sm bg-destructive/15 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-destructive">
+        <span className="live-dot inline-block h-1 w-1 rounded-full bg-destructive" aria-hidden="true" />
+        Live
+      </span>
+    )
+  }
+  if (status === "soon") {
+    return (
+      <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary">
+        Up Next
+      </span>
+    )
+  }
+  if (status === "done") {
+    return (
+      <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        Wrapped
+      </span>
+    )
+  }
+  return null
 }
 
 function BriefingStat({
