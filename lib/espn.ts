@@ -3,16 +3,16 @@
 // default, so this naturally rolls over to a new day. We revalidate on a
 // short interval so times/scores stay fresh and the date updates on its own.
 
-// Sports are ranked in display order: Baseball, Football, Soccer, Basketball,
-// Combat & Motorsport, then Hockey and MLS together at the end.
+// Personalized sport ranking: Baseball, Football, Soccer, Motorsport (F1),
+// Golf, Tennis, Basketball. NHL and UFC are intentionally excluded.
 export type LeagueCategory =
   | "Baseball"
   | "Football"
   | "Soccer"
+  | "Motorsport"
+  | "Golf"
+  | "Tennis"
   | "Basketball"
-  | "Combat & Motorsport"
-  | "Hockey"
-  | "MLS"
 
 export interface LeagueConfig {
   id: string
@@ -27,16 +27,6 @@ export const LEAGUES: LeagueConfig[] = [
   // Triple-A (Gwinnett Stripers) comes from the MLB Stats API, not ESPN —
   // path is unused; getTodaysGames routes this id to fetchStripers().
   { id: "aaa", label: "Triple-A", shortLabel: "AAA", category: "Baseball", path: "" },
-  { id: "epl", label: "Premier League", shortLabel: "EPL", category: "Soccer", path: "soccer/eng.1" },
-  {
-    id: "ucl",
-    label: "Champions League",
-    shortLabel: "UCL",
-    category: "Soccer",
-    path: "soccer/uefa.champions",
-  },
-  { id: "mls", label: "MLS", shortLabel: "MLS", category: "MLS", path: "soccer/usa.1" },
-  { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
   { id: "nfl", label: "NFL", shortLabel: "NFL", category: "Football", path: "football/nfl" },
   {
     id: "ncaaf",
@@ -45,6 +35,20 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Football",
     path: "football/college-football",
   },
+  { id: "epl", label: "Premier League", shortLabel: "EPL", category: "Soccer", path: "soccer/eng.1" },
+  {
+    id: "ucl",
+    label: "Champions League",
+    shortLabel: "UCL",
+    category: "Soccer",
+    path: "soccer/uefa.champions",
+  },
+  { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
+  { id: "mls", label: "MLS", shortLabel: "MLS", category: "Soccer", path: "soccer/usa.1" },
+  { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Motorsport", path: "racing/f1" },
+  { id: "pga", label: "PGA Tour", shortLabel: "PGA", category: "Golf", path: "golf/pga" },
+  { id: "atp", label: "ATP Tour", shortLabel: "ATP", category: "Tennis", path: "tennis/atp" },
+  { id: "wta", label: "WTA Tour", shortLabel: "WTA", category: "Tennis", path: "tennis/wta" },
   { id: "nba", label: "NBA", shortLabel: "NBA", category: "Basketball", path: "basketball/nba" },
   {
     id: "ncaam",
@@ -53,9 +57,6 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Basketball",
     path: "basketball/mens-college-basketball",
   },
-  { id: "nhl", label: "NHL", shortLabel: "NHL", category: "Hockey", path: "hockey/nhl" },
-  { id: "ufc", label: "UFC", shortLabel: "UFC", category: "Combat & Motorsport", path: "mma/ufc" },
-  { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Combat & Motorsport", path: "racing/f1" },
 ]
 
 export interface ProbablePitcher {
@@ -95,6 +96,16 @@ export interface Game {
   note?: string
   week?: number // NFL/NCAAF week number
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
+  leaders?: GameLeader[] // Star performers (populated for live games)
+}
+
+export interface GameLeader {
+  category: string // e.g. "Passing Yards", "Home Runs"
+  athlete: string
+  shortName: string
+  headshot?: string
+  team?: string // team abbreviation
+  value: string // e.g. "2-3, HR, 3 RBI"
 }
 
 interface EspnResponse {
@@ -110,6 +121,8 @@ interface EspnEvent {
   week?: { number?: number }
   links?: { text?: string; href?: string }[]
   competitions?: EspnCompetition[]
+  // Tennis scoreboards nest matches under groupings (e.g. "Men's Singles").
+  groupings?: { competitions?: EspnCompetition[] }[]
 }
 
 interface EspnCompetition {
@@ -128,6 +141,14 @@ interface EspnProbable {
   statistics?: { abbreviation?: string; displayValue?: string }[]
 }
 
+interface EspnLeaderGroup {
+  displayName?: string
+  leaders?: {
+    displayValue?: string
+    athlete?: { displayName?: string; shortName?: string; headshot?: string }
+  }[]
+}
+
 interface EspnCompetitor {
   homeAway?: string
   winner?: boolean
@@ -136,6 +157,7 @@ interface EspnCompetitor {
   athlete?: { displayName?: string; shortName?: string; flag?: { href?: string } }
   records?: { summary?: string }[]
   probables?: EspnProbable[]
+  leaders?: EspnLeaderGroup[]
 }
 
 function mapProbablePitcher(c: EspnCompetitor): ProbablePitcher | undefined {
@@ -196,40 +218,79 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
     if (!res.ok) return []
     const data = (await res.json()) as EspnResponse
     const isFootball = league.id === "nfl" || league.id === "ncaaf"
+    const isTennis = league.category === "Tennis"
     const games: Game[] = []
     for (const event of data.events ?? []) {
-      const comp = event.competitions?.[0]
-      if (!comp) continue
-      const state = (comp.status?.type?.state as GameState) ?? "pre"
-      const competitors = (comp.competitors ?? []).map(mapCompetitor)
-      // Order away first, home second for team sports.
-      competitors.sort((a, b) => Number(a.isHome) - Number(b.isHome))
-      games.push({
-        id: event.id,
-        leagueId: league.id,
-        leagueLabel: league.label,
-        leagueShort: league.shortLabel,
-        category: league.category,
-        name: event.name ?? event.shortName ?? "",
-        shortName: event.shortName ?? event.name ?? "",
-        date: comp.date ?? event.date ?? "",
-        state,
-        statusDetail: comp.status?.type?.shortDetail ?? comp.status?.type?.detail ?? "",
-        competitors,
-        broadcasts: extractBroadcasts(comp),
-        venue: comp.venue?.fullName,
-        note: comp.notes?.[0]?.headline,
-        week: isFootball ? (event.week?.number ?? data.week?.number) : undefined,
-        link:
-          (event.links ?? []).find((l) => l.text === "Gamecast")?.href ??
-          (event.links ?? []).find((l) => l.text === "Box Score")?.href ??
-          event.links?.[0]?.href,
+      // Tennis events are tournaments containing many matches (nested under
+      // groupings); every other sport has a single competition per event.
+      const tennisComps =
+        (event.competitions?.length ?? 0) > 0
+          ? (event.competitions ?? [])
+          : (event.groupings ?? []).flatMap((g) => g.competitions ?? [])
+      const comps = isTennis ? tennisComps.slice(0, 8) : (event.competitions ?? []).slice(0, 1)
+      comps.forEach((comp, compIndex) => {
+        const state = (comp.status?.type?.state as GameState) ?? "pre"
+        let competitors = (comp.competitors ?? []).map(mapCompetitor)
+        // Order away first, home second for team sports.
+        competitors.sort((a, b) => Number(a.isHome) - Number(b.isHome))
+        // Field events (golf tournaments, F1 races) can list 100+ entrants —
+        // keep only the leaders so cards stay scannable.
+        if (competitors.length > 2) competitors = competitors.slice(0, 5)
+        const matchName = isTennis
+          ? competitors.map((c) => c.shortName).join(" vs ")
+          : (event.name ?? event.shortName ?? "")
+        games.push({
+          id: isTennis ? `${event.id}-${compIndex}` : event.id,
+          leagueId: league.id,
+          leagueLabel: league.label,
+          leagueShort: league.shortLabel,
+          category: league.category,
+          name: isTennis ? `${event.name} — ${matchName}` : matchName,
+          shortName: isTennis ? matchName : (event.shortName ?? event.name ?? ""),
+          date: comp.date ?? event.date ?? "",
+          state,
+          statusDetail: comp.status?.type?.shortDetail ?? comp.status?.type?.detail ?? "",
+          competitors,
+          broadcasts: extractBroadcasts(comp),
+          venue: comp.venue?.fullName,
+          note: comp.notes?.[0]?.headline ?? (isTennis ? event.name : undefined),
+          week: isFootball ? (event.week?.number ?? data.week?.number) : undefined,
+          link:
+            (event.links ?? []).find((l) => l.text === "Gamecast")?.href ??
+            (event.links ?? []).find((l) => l.text === "Box Score")?.href ??
+            event.links?.[0]?.href,
+          leaders: state === "in" ? extractLeaders(comp) : undefined,
+        })
       })
     }
     return games
   } catch {
     return []
   }
+}
+
+function extractLeaders(comp: EspnCompetition): GameLeader[] | undefined {
+  const leaders: GameLeader[] = []
+  const seen = new Set<string>()
+  for (const c of comp.competitors ?? []) {
+    for (const group of c.leaders ?? []) {
+      const top = group.leaders?.[0]
+      const name = top?.athlete?.displayName
+      if (!name || !top?.displayValue || !group.displayName) continue
+      // One entry per athlete per game — their first (most notable) category.
+      if (seen.has(name)) continue
+      seen.add(name)
+      leaders.push({
+        category: group.displayName,
+        athlete: name,
+        shortName: top.athlete?.shortName ?? name,
+        headshot: top.athlete?.headshot,
+        team: c.team?.abbreviation,
+        value: top.displayValue,
+      })
+    }
+  }
+  return leaders.length > 0 ? leaders : undefined
 }
 
 // ---------- Gwinnett Stripers (Triple-A) via the MLB Stats API ----------
@@ -364,13 +425,15 @@ interface EspnNewsResponse {
   }[]
 }
 
+// Matches the personalized sport set: no NHL/UFC.
 const NEWS_FEEDS: { path: string; source: string }[] = [
   { path: "baseball/mlb", source: "MLB" },
   { path: "football/nfl", source: "NFL" },
-  { path: "basketball/nba", source: "NBA" },
-  { path: "hockey/nhl", source: "NHL" },
   { path: "soccer/eng.1", source: "Soccer" },
-  { path: "mma/ufc", source: "UFC" },
+  { path: "racing/f1", source: "F1" },
+  { path: "golf/pga", source: "Golf" },
+  { path: "tennis/atp", source: "Tennis" },
+  { path: "basketball/nba", source: "NBA" },
 ]
 
 async function fetchNewsFeed(feed: { path: string; source: string }): Promise<NewsArticle[]> {
@@ -413,17 +476,129 @@ export async function getTopNews(): Promise<NewsArticle[]> {
     .slice(0, 8)
 }
 
+// ---------- Statcast highlights (MLB live feeds) ----------
+
+export interface StatcastHighlight {
+  id: string
+  player: string
+  team?: string
+  event: string // e.g. "Home Run"
+  description: string
+  exitVelo?: number // mph
+  distance?: number // ft
+  launchAngle?: number
+  matchup: string // e.g. "NYY @ BOS"
+  link: string
+}
+
+// Thresholds for "extremely impressive": scorching contact, tape-measure
+// distance, or any home run hit 105+.
+const EV_THRESHOLD = 108
+const DISTANCE_THRESHOLD = 425
+const HR_EV_THRESHOLD = 105
+
+interface LiveFeedPlay {
+  result?: { event?: string; description?: string }
+  about?: { atBatIndex?: number }
+  matchup?: { batter?: { fullName?: string } }
+  playEvents?: {
+    hitData?: { launchSpeed?: number; totalDistance?: number; launchAngle?: number }
+  }[]
+}
+
+async function fetchGameStatcast(gamePk: number, matchup: string): Promise<StatcastHighlight[]> {
+  try {
+    const res = await fetch(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, {
+      // Live feeds are large; refresh every 2 minutes.
+      next: { revalidate: 120 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      liveData?: { plays?: { allPlays?: LiveFeedPlay[] } }
+    }
+    const highlights: StatcastHighlight[] = []
+    for (const play of data.liveData?.plays?.allPlays ?? []) {
+      const hit = (play.playEvents ?? []).find((ev) => ev.hitData?.launchSpeed)?.hitData
+      if (!hit?.launchSpeed) continue
+      const eventType = play.result?.event ?? ""
+      const isHomer = eventType === "Home Run"
+      const impressive =
+        hit.launchSpeed >= EV_THRESHOLD ||
+        (hit.totalDistance ?? 0) >= DISTANCE_THRESHOLD ||
+        (isHomer && hit.launchSpeed >= HR_EV_THRESHOLD)
+      if (!impressive) continue
+      const player = play.matchup?.batter?.fullName ?? "Unknown"
+      highlights.push({
+        id: `${gamePk}-${play.about?.atBatIndex ?? highlights.length}`,
+        player,
+        event: eventType,
+        description: play.result?.description ?? "",
+        exitVelo: hit.launchSpeed,
+        distance: hit.totalDistance,
+        launchAngle: hit.launchAngle,
+        matchup,
+        link: `https://www.mlb.com/gameday/${gamePk}`,
+      })
+    }
+    return highlights
+  } catch {
+    return []
+  }
+}
+
+export async function getStatcastHighlights(): Promise<StatcastHighlight[]> {
+  try {
+    const res = await fetch("https://statsapi.mlb.com/api/v1/schedule?sportId=1&hydrate=team", {
+      next: { revalidate: 120 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      dates?: {
+        games?: {
+          gamePk: number
+          status?: { abstractGameState?: string }
+          teams?: {
+            away?: { team?: { abbreviation?: string; name?: string } }
+            home?: { team?: { abbreviation?: string; name?: string } }
+          }
+        }[]
+      }[]
+    }
+    const active = (data.dates ?? [])
+      .flatMap((d) => d.games ?? [])
+      .filter((g) => g.status?.abstractGameState === "Live" || g.status?.abstractGameState === "Final")
+      .slice(0, 12)
+    const results = await Promise.all(
+      active.map((g) => {
+        const away = g.teams?.away?.team?.abbreviation ?? "AWY"
+        const home = g.teams?.home?.team?.abbreviation ?? "HME"
+        return fetchGameStatcast(g.gamePk, `${away} @ ${home}`)
+      }),
+    )
+    return results
+      .flat()
+      .sort((a, b) => (b.exitVelo ?? 0) - (a.exitVelo ?? 0))
+      .slice(0, 6)
+  } catch {
+    return []
+  }
+}
+
 export interface SportsData {
   games: Game[]
   news: NewsArticle[]
+  statcast: StatcastHighlight[]
   fetchedAt: string
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const [results, news] = await Promise.all([
+  const [results, news, statcast] = await Promise.all([
     Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league)))),
     getTopNews(),
+    getStatcastHighlights(),
   ])
   const games = results.flat()
-  return { games, news, fetchedAt: new Date().toISOString() }
+  return { games, news, statcast, fetchedAt: new Date().toISOString() }
 }

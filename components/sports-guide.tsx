@@ -5,18 +5,29 @@ import useSWR from "swr"
 import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
-import { LEAGUES, isFavoriteGame, type Game, type LeagueCategory, type NewsArticle, type SportsData } from "@/lib/espn"
+import { StarPerformers } from "@/components/star-performers"
+import {
+  LEAGUES,
+  isFavoriteGame,
+  type Game,
+  type LeagueCategory,
+  type NewsArticle,
+  type SportsData,
+  type StatcastHighlight,
+} from "@/lib/espn"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
+// Personalized priority: baseball first, then football, soccer, F1, golf,
+// tennis, basketball.
 const CATEGORY_ORDER: LeagueCategory[] = [
   "Baseball",
   "Football",
   "Soccer",
+  "Motorsport",
+  "Golf",
+  "Tennis",
   "Basketball",
-  "Combat & Motorsport",
-  "Hockey",
-  "MLS",
 ]
 
 type Filter = "all" | "live" | string
@@ -30,17 +41,19 @@ function greetingForHour(hour: number) {
 export function SportsGuide({
   games: initialGames,
   news: initialNews,
+  statcast: initialStatcast,
   fetchedAt: initialFetchedAt,
 }: {
   games: Game[]
   news: NewsArticle[]
+  statcast: StatcastHighlight[]
   fetchedAt: string
 }) {
   // Poll for fresh data every 60s, revalidate when the tab regains focus or
   // the network reconnects, and keep polling in background tabs. The
   // server-rendered payload seeds the cache so there is never a blank state.
   const { data } = useSWR<SportsData>("/api/games", fetcher, {
-    fallbackData: { games: initialGames, news: initialNews, fetchedAt: initialFetchedAt },
+    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, fetchedAt: initialFetchedAt },
     refreshInterval: 60_000,
     refreshWhenHidden: true,
     revalidateOnFocus: true,
@@ -48,6 +61,7 @@ export function SportsGuide({
   })
   const games = data?.games ?? initialGames
   const news = data?.news ?? initialNews
+  const statcast = data?.statcast ?? initialStatcast
   const fetchedAt = data?.fetchedAt ?? initialFetchedAt
 
   const [filter, setFilter] = useState<Filter>("all")
@@ -185,6 +199,8 @@ export function SportsGuide({
       </nav>
 
       {filter === "all" ? <SportsNews articles={news} /> : null}
+
+      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 
       {filter === "all" && favoriteGames.length > 0 ? (
         <section className="mb-10">
