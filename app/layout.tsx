@@ -1,15 +1,16 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
+import { GeographicBackdrop } from '@/components/geographic-backdrop'
 import './globals.css'
 
 const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'Sports Slate — Live Scores & How to Watch',
+  title: 'Ball Knowledge — Live Scores & How to Watch',
   description:
-    "Today's slate ranked by sport — baseball, soccer, football, basketball, hockey, and more — with live scores, start times, and the channels and streaming services to watch on.",
+    "Your personalized sports intelligence hub — live scores, standout performances, and the next events worth your attention across baseball, football, soccer, F1, golf, tennis, and basketball.",
   generator: 'v0.app',
   icons: {
     icon: [
@@ -31,11 +32,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'light dark',
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: 'white' },
-    { media: '(prefers-color-scheme: dark)', color: 'black' },
-  ],
+  colorScheme: 'dark',
+  themeColor: '#0d130e',
 }
 
 export default function RootLayout({
@@ -46,6 +44,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`bg-background ${geistSans.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
+        <GeographicBackdrop />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

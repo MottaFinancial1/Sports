@@ -25,14 +25,21 @@ function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   }, [iso])
 
   if (state === "in") {
-    return <span className="text-sm font-bold text-destructive">LIVE</span>
+    return (
+      <span className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase tracking-wider text-destructive">
+        <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden="true" />
+        Live
+      </span>
+    )
   }
   if (state === "post") {
-    return <span className="text-sm font-semibold text-muted-foreground">Final</span>
+    return (
+      <span className="font-mono text-xs font-semibold uppercase tracking-wider text-muted-foreground">Final</span>
+    )
   }
   return (
-    <span className="text-sm font-bold tabular-nums text-foreground">
-      {dateLabel ? <span className="font-semibold text-muted-foreground">{dateLabel} · </span> : null}
+    <span className="font-mono text-xs font-bold tabular-nums tracking-wide text-foreground">
+      {dateLabel ? <span className="font-medium text-muted-foreground">{dateLabel} · </span> : null}
       {label || "--"}
     </span>
   )
@@ -77,7 +84,11 @@ function TeamRow({
           {record ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{record}</span> : null}
         </div>
         {showScore && score !== undefined ? (
-          <span className={`shrink-0 text-sm tabular-nums ${winner ? "font-bold" : "font-medium"} text-foreground`}>
+          <span
+            className={`shrink-0 font-mono text-base tabular-nums leading-none ${
+              winner ? "font-extrabold text-primary" : "font-semibold text-foreground"
+            }`}
+          >
             {score}
           </span>
         ) : null}
@@ -102,22 +113,26 @@ export function GameCard({ game }: { game: Game }) {
   const isEvent = game.competitors.length !== 2
 
   const card = (
-    <article className="group flex h-full flex-col gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-primary/40">
+    <article
+      className={`group flex h-full flex-col gap-3 rounded-lg border bg-card p-4 transition-all hover:border-primary/60 hover:shadow-[0_0_20px_-6px_var(--color-primary)] ${
+        game.state === "in" ? "border-destructive/40" : "border-border"
+      }`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5">
-          <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold text-secondary-foreground">
+          <span className="rounded-sm bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-secondary-foreground">
             {game.leagueShort}
           </span>
           {game.week !== undefined ? (
-            <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-              Week {game.week}
+            <span className="rounded-sm bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary">
+              Wk {game.week}
             </span>
           ) : null}
         </div>
         <div className="flex items-center gap-2">
           <GameTime iso={game.date} state={game.state} />
           {game.state === "in" ? (
-            <span className="text-xs font-medium text-muted-foreground">{game.statusDetail}</span>
+            <span className="font-mono text-xs font-medium text-muted-foreground">{game.statusDetail}</span>
           ) : null}
           {game.link ? (
             <ExternalLink
@@ -162,14 +177,14 @@ export function GameCard({ game }: { game: Game }) {
             {game.broadcasts.map((b) => (
               <span
                 key={b}
-                className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+                className="rounded-sm border border-primary/25 bg-primary/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-primary"
               >
                 {b}
               </span>
             ))}
           </div>
         ) : (
-          <span className="text-xs text-muted-foreground">Broadcast TBD</span>
+          <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">Broadcast TBD</span>
         )}
       </div>
     </article>
@@ -182,7 +197,7 @@ export function GameCard({ game }: { game: Game }) {
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`${game.shortName || game.name} — open live stats and box score`}
-        className="rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         {card}
       </a>
