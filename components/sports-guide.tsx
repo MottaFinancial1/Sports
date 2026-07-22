@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
+import { AskSlate } from "@/components/ask-slate"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
 import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
@@ -173,14 +174,15 @@ export function SportsGuide({
       </div>
 
       <header className="flex flex-col gap-5 pt-6 sm:pt-8">
-        <div>
-          <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-            Sports<span className="text-primary">_</span>Slate
+        <div className="relative">
+          <div className="absolute -inset-x-4 -inset-y-2 rounded-lg bg-gradient-to-r from-destructive/10 via-transparent to-primary/10 blur-xl" aria-hidden="true" />
+          <h1 className="relative font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
+            Sports<span className="text-destructive">_</span>Slate
           </h1>
-          <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:hidden">{today || "Loading…"}</p>
         </div>
+        <p className="text-sm leading-relaxed text-muted-foreground sm:hidden">{today || "Loading…"}</p>
 
-        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
+        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4 ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
           <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
           <BriefingStat
             icon={Flame}
@@ -225,6 +227,8 @@ export function SportsGuide({
       ) : null}
 
       {filter === "all" ? <SportsNews articles={news} /> : null}
+
+      {filter === "all" ? <AskSlate /> : null}
 
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 
