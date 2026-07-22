@@ -180,7 +180,7 @@ export function SportsGuide({
               Personalized sports intelligence
             </p>
             <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-              Sports<span className="text-destructive">_</span>Slate
+              Ball<span className="text-destructive">_</span>Knowledge
             </h1>
           </div>
           <p className="max-w-xs text-pretty text-sm leading-relaxed text-muted-foreground">

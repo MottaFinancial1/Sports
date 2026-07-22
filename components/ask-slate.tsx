@@ -60,7 +60,7 @@ export function AskSlate() {
     <section className="mb-10">
       <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
         <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-        Ask Slate
+        Ask Ball Knowledge
         <span className="h-px flex-1 bg-border" aria-hidden="true" />
       </h2>
 

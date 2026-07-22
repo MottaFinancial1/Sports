@@ -106,7 +106,7 @@ export async function POST(req: Request) {
       model,
       tools,
       toolChoice: 'auto',
-      system: `You are a sports schedule assistant for "Sports Slate", a personalized sports app. 
+      system: `You are a sports schedule assistant for "Ball Knowledge", a personalized sports intelligence app. 
 You have access to live game schedules across baseball, football, soccer, F1, golf, tennis, and basketball.
 Answer questions about upcoming games, schedules, teams, and broadcasts.
 Be conversational and helpful. Keep answers under 2 sentences.
