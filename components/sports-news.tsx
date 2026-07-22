@@ -30,16 +30,17 @@ export function SportsNews({ articles }: { articles: NewsArticle[] }) {
 
   return (
     <section className="mb-10">
-      <h2 className="mb-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-primary">
+      <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
         <Newspaper className="h-3.5 w-3.5" aria-hidden="true" />
         Biggest News in Sports
+        <span className="h-px flex-1 bg-border" aria-hidden="true" />
       </h2>
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <a
           href={lead.link}
           target="_blank"
           rel="noopener noreferrer"
-          className="group relative flex min-h-56 flex-col justify-end overflow-hidden rounded-xl border border-border bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          className="group relative flex min-h-56 flex-col justify-end overflow-hidden rounded-lg border border-border bg-card focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
           {lead.image ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -51,8 +52,8 @@ export function SportsNews({ articles }: { articles: NewsArticle[] }) {
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-transparent" aria-hidden="true" />
           <div className="relative flex flex-col gap-1.5 p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-white/80">
-              <span className="rounded-md bg-white/15 px-2 py-0.5 backdrop-blur-sm">{lead.source}</span>
+            <div className="flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-wider text-white/80">
+              <span className="rounded-sm bg-white/15 px-2 py-0.5 backdrop-blur-sm">{lead.source}</span>
               <TimeAgo iso={lead.published} />
             </div>
             <p className="text-pretty text-lg font-bold leading-snug text-white">{lead.headline}</p>
@@ -69,11 +70,11 @@ export function SportsNews({ articles }: { articles: NewsArticle[] }) {
                 href={a.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group flex items-start justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 transition-colors hover:border-primary/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="group flex items-start justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 transition-all hover:border-primary/60 hover:shadow-[0_0_20px_-6px_var(--color-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
               >
                 <div className="flex min-w-0 flex-col gap-0.5">
                   <p className="line-clamp-2 text-sm font-semibold leading-snug text-foreground">{a.headline}</p>
-                  <p className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <p className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
                     <span className="font-semibold text-primary">{a.source}</span>
                     <TimeAgo iso={a.published} />
                   </p>

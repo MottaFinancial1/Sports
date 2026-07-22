@@ -124,28 +124,31 @@ export function SportsGuide({
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 pb-8 sm:px-6 sm:pb-10">
-      <header className="flex flex-col gap-4 pt-6 sm:pt-8">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="flex items-center gap-1.5 text-sm font-medium text-primary">
-              <GreetingIcon className="h-4 w-4" aria-hidden="true" />
-              <span>{greeting?.text ?? "Hello"}</span>
-            </p>
-            <h1 className="mt-0.5 font-mono text-3xl font-extrabold uppercase tracking-tight text-foreground sm:text-4xl">
-              Sports Slate
-            </h1>
-            <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-              <CalendarDays className="h-4 w-4" aria-hidden="true" />
-              <span>{today || "Loading…"}</span>
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs text-secondary-foreground">
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-            <span>Auto-updates · synced {updated || "…"}</span>
-          </div>
+      {/* Terminal-style status bar */}
+      <div className="-mx-4 flex items-center justify-between gap-3 border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground sm:-mx-6 sm:px-6">
+        <span className="flex items-center gap-1.5">
+          <GreetingIcon className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          {greeting?.text ?? "Hello"}
+        </span>
+        <span className="hidden items-center gap-1.5 sm:flex">
+          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+          {today || "Loading…"}
+        </span>
+        <span className="flex items-center gap-1.5 text-primary">
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          Synced {updated || "…"}
+        </span>
+      </div>
+
+      <header className="flex flex-col gap-5 pt-6 sm:pt-8">
+        <div>
+          <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
+            Sports<span className="text-primary">_</span>Slate
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground sm:hidden">{today || "Loading…"}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-4">
           <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
           <BriefingStat
             icon={Flame}
@@ -185,9 +188,10 @@ export function SportsGuide({
 
       {filter === "all" && favoriteGames.length > 0 ? (
         <section className="mb-10">
-          <h2 className="mb-4 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-primary">
+          <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
             <Star className="h-3.5 w-3.5 fill-primary" aria-hidden="true" />
             Favorite Teams
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {favoriteGames.map((g) => (
@@ -198,7 +202,7 @@ export function SportsGuide({
       ) : null}
 
       {grouped.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
+        <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
           <p className="text-lg font-semibold text-foreground">No games match this filter</p>
           <p className="mt-1 text-sm text-muted-foreground">
             Try another league, or check back — the schedule refreshes automatically.
@@ -208,13 +212,19 @@ export function SportsGuide({
         <div className="flex flex-col gap-10">
           {grouped.map(({ category, leagues }) => (
             <section key={category}>
-              <h2 className="mb-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">{category}</h2>
+              <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                <span className="inline-block h-3 w-1 bg-primary" aria-hidden="true" />
+                {category}
+                <span className="h-px flex-1 bg-border" aria-hidden="true" />
+              </h2>
               <div className="flex flex-col gap-6">
                 {leagues.map(({ league, games: leagueGames }) => (
                   <div key={league.id}>
-                    <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-foreground">
+                    <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
                       {league.label}
-                      <span className="text-xs font-medium text-muted-foreground">({leagueGames.length})</span>
+                      <span className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
+                        {String(leagueGames.length).padStart(2, "0")}
+                      </span>
                     </h3>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {leagueGames.map((g) => (
@@ -247,12 +257,12 @@ function BriefingStat({
 }) {
   const inner = (
     <>
-      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-        <Icon className={`h-3.5 w-3.5 ${highlight ? "text-destructive" : "text-primary"}`} aria-hidden="true" />
+      <span className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+        <Icon className={`h-3 w-3 ${highlight ? "live-dot text-destructive" : "text-primary"}`} aria-hidden="true" />
         {label}
       </span>
       <span
-        className={`mt-1 font-mono text-xl font-extrabold tabular-nums ${
+        className={`mt-1.5 font-mono text-2xl font-extrabold tabular-nums leading-none ${
           highlight ? "text-destructive" : "text-foreground"
         }`}
       >
@@ -266,14 +276,14 @@ function BriefingStat({
       <button
         type="button"
         onClick={onClick}
-        className="flex flex-col items-start rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-left transition-colors hover:bg-destructive/10"
+        className="flex flex-col items-start bg-destructive/10 p-3.5 text-left transition-colors hover:bg-destructive/20 sm:p-4"
       >
         {inner}
       </button>
     )
   }
 
-  return <div className="flex flex-col rounded-xl border border-border bg-card p-3">{inner}</div>
+  return <div className="flex flex-col bg-card p-3.5 sm:p-4">{inner}</div>
 }
 
 function FilterChip({
@@ -291,12 +301,12 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-semibold transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider transition-colors ${
         active
-          ? "bg-primary text-primary-foreground"
+          ? "border-primary bg-primary text-primary-foreground"
           : highlight
-            ? "bg-destructive/10 text-destructive hover:bg-destructive/20"
-            : "bg-secondary text-secondary-foreground hover:bg-muted"
+            ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20"
+            : "border-border bg-card text-secondary-foreground hover:border-primary/50 hover:text-primary"
       }`}
     >
       {children}
