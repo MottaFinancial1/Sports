@@ -156,7 +156,7 @@ export function SportsGuide({
   const GreetingIcon = greeting?.Icon ?? Sunrise
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 pb-8 sm:px-6 sm:pb-10">
+    <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
       {/* Terminal-style status bar */}
       <div className="-mx-4 flex items-center justify-between gap-3 border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground sm:-mx-6 sm:px-6">
         <span className="flex items-center gap-1.5">
@@ -173,14 +173,20 @@ export function SportsGuide({
         </span>
       </div>
 
-      <header className="flex flex-col gap-5 pt-6 sm:pt-8">
-        <div className="relative">
-          <div className="absolute -inset-x-4 -inset-y-2 rounded-lg bg-gradient-to-r from-destructive/10 via-transparent to-primary/10 blur-xl" aria-hidden="true" />
-          <h1 className="relative font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-            Sports<span className="text-destructive">_</span>Slate
-          </h1>
+      <header className="flex flex-col gap-5 pt-7 sm:pt-10">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-destructive pl-4">
+          <div>
+            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-destructive">
+              Personalized sports intelligence
+            </p>
+            <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
+              Sports<span className="text-destructive">_</span>Slate
+            </h1>
+          </div>
+          <p className="max-w-xs text-pretty text-sm leading-relaxed text-muted-foreground">
+            Live scores, standout performances, and the next events worth your attention.
+          </p>
         </div>
-        <p className="text-sm leading-relaxed text-muted-foreground sm:hidden">{today || "Loading…"}</p>
 
         <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4 ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
           <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
@@ -226,11 +232,7 @@ export function SportsGuide({
         />
       ) : null}
 
-      {filter === "all" ? <SportsNews articles={news} /> : null}
-
       {filter === "all" ? <AskSlate /> : null}
-
-      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 
       {filter === "all" && favoriteGames.length > 0 ? (
         <section className="mb-10">
@@ -246,6 +248,10 @@ export function SportsGuide({
           </div>
         </section>
       ) : null}
+
+      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
+
+      {filter === "all" ? <SportsNews articles={news} /> : null}
 
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">

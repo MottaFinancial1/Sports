@@ -1,79 +1,37 @@
-'use client'
+"use client"
+
+const LOCATIONS = [
+  { code: "LAX", city: "Anaheim", detail: "Angels", position: "left-[6%] top-[22%]", tone: "border-destructive/25 text-destructive/45" },
+  { code: "BOS", city: "Boston", detail: "Red Sox", position: "right-[5%] top-[15%]", tone: "border-destructive/30 text-destructive/50" },
+  { code: "ATL", city: "Gwinnett", detail: "Stripers", position: "right-[9%] bottom-[16%]", tone: "border-primary/20 text-primary/40" },
+]
 
 /**
- * Geographic backdrop layer showing favorite teams' locations.
- * Rendered as a fixed pseudo-map with subtle location markers.
- * Positioned behind content, professional and unobtrusive.
+ * Restrained geographic context for favorite teams. This behaves like a
+ * broadcast coordinate overlay rather than a literal map, keeping the page
+ * professional and preserving contrast behind score cards.
  */
-
 export function GeographicBackdrop() {
   return (
-    <div className="pointer-events-none fixed inset-0 overflow-hidden opacity-20">
-      {/* Los Angeles Angels - West Coast, primary position */}
-      <div className="absolute top-1/4 left-1/12 flex flex-col items-center">
-        <div className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-        <div className="mt-1 h-12 w-12 rounded-full border border-primary/30" aria-hidden="true" />
-        <div className="mt-2 font-mono text-xs font-semibold text-primary/60">LA</div>
-      </div>
+    <div className="pointer-events-none fixed inset-0 z-0 hidden overflow-hidden lg:block" aria-hidden="true">
+      <div className="absolute inset-y-0 left-1/2 w-px bg-border/30" />
+      <div className="absolute inset-x-0 top-1/2 h-px bg-border/20" />
 
-      {/* Boston Red Sox - Northeast, top-right */}
-      <div className="absolute top-1/3 right-1/6 flex flex-col items-center">
-        <div className="h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden="true" />
-        <div className="mt-1 h-12 w-12 rounded-full border border-destructive/25" aria-hidden="true" />
-        <div className="mt-2 font-mono text-xs font-semibold text-destructive/50">BOS</div>
-      </div>
+      {LOCATIONS.map((location) => (
+        <div key={location.code} className={`absolute ${location.position} opacity-70`}>
+          <div className={`relative border-l pl-3 font-mono ${location.tone}`}>
+            <span className="absolute -left-1 top-0 h-2 w-2 rounded-full border bg-background" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em]">{location.code}</p>
+            <p className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground/30">
+              {location.city} / {location.detail}
+            </p>
+          </div>
+        </div>
+      ))}
 
-      {/* Gwinnett Stripers - Southeast (Atlanta area), bottom-right */}
-      <div className="absolute bottom-1/4 right-1/4 flex flex-col items-center">
-        <div className="h-1.5 w-1.5 rounded-full bg-yellow-600/80" aria-hidden="true" />
-        <div className="mt-1 h-12 w-12 rounded-full border border-yellow-600/20" aria-hidden="true" />
-        <div className="mt-2 font-mono text-xs font-semibold text-yellow-600/40">ATL</div>
+      <div className="absolute bottom-8 left-8 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground/20">
+        Favorite team network · coast to coast
       </div>
-
-      {/* Subtle connecting lines between locations */}
-      <svg
-        className="absolute inset-0 h-full w-full"
-        aria-hidden="true"
-        preserveAspectRatio="xMidYMid slice"
-      >
-        <defs>
-          <linearGradient id="line-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="oklch(0.85 0.23 148 / 0.1)" />
-            <stop offset="50%" stopColor="oklch(0.68 0.21 27 / 0.05)" />
-            <stop offset="100%" stopColor="oklch(0.65 0.18 60 / 0.08)" />
-          </linearGradient>
-        </defs>
-        {/* LA to Boston connection */}
-        <line
-          x1="8%"
-          y1="25%"
-          x2="83%"
-          y2="33%"
-          stroke="url(#line-gradient)"
-          strokeWidth="0.5"
-          strokeDasharray="2,3"
-        />
-        {/* Boston to Atlanta connection */}
-        <line
-          x1="83%"
-          y1="33%"
-          x2="75%"
-          y2="75%"
-          stroke="url(#line-gradient)"
-          strokeWidth="0.5"
-          strokeDasharray="2,3"
-        />
-        {/* Atlanta to LA connection */}
-        <line
-          x1="75%"
-          y1="75%"
-          x2="8%"
-          y2="25%"
-          stroke="url(#line-gradient)"
-          strokeWidth="0.5"
-          strokeDasharray="2,3"
-        />
-      </svg>
     </div>
   )
 }

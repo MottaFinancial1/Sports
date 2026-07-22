@@ -1,6 +1,5 @@
-import { generateText } from 'ai'
+import { generateText, stepCountIs, tool } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai'
-import { tool } from 'ai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 
@@ -28,11 +27,11 @@ export async function POST(req: Request) {
       )
       .join('\n')
 
-    const tools = [
-      tool({
+    const tools = {
+      searchSchedule: tool({
         description:
           'Search the schedule for games matching a team, date range, or league',
-        parameters: z.object({
+        inputSchema: z.object({
           query: z
             .string()
             .describe(
@@ -58,9 +57,9 @@ export async function POST(req: Request) {
             .join('\n')
         },
       }),
-      tool({
+      findNextGame: tool({
         description: 'Find the next game for a specific team',
-        parameters: z.object({
+        inputSchema: z.object({
           teamName: z.string().describe('Team name or abbreviation'),
         }),
         execute: async ({ teamName }) => {
@@ -75,9 +74,9 @@ export async function POST(req: Request) {
           return `${awayTeam?.shortName} @ ${homeTeam?.shortName} on ${new Date(next.date).toLocaleDateString()} (${next.leagueShort}). ${next.broadcasts.length > 0 ? `Watch on: ${next.broadcasts.join(', ')}` : 'Broadcast TBD'}`
         },
       }),
-      tool({
+      findHomeGames: tool({
         description: 'Check if a team plays at home on a specific date or date range',
-        parameters: z.object({
+        inputSchema: z.object({
           teamName: z.string().describe('Team name'),
           dateRange: z
             .string()
@@ -101,7 +100,7 @@ export async function POST(req: Request) {
             .join('\n')
         },
       }),
-    ]
+    }
 
     const response = await generateText({
       model,
@@ -116,7 +115,7 @@ Today's date: ${now.toLocaleDateString()}.
 Current games and schedule:
 ${scheduleContext}`,
       prompt: question,
-      maxToolRoundtrips: 2,
+      stopWhen: stepCountIs(3),
     })
 
     return Response.json({ answer: response.text })

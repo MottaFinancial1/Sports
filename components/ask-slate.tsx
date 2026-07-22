@@ -66,7 +66,7 @@ export function AskSlate() {
 
       <div
         ref={containerRef}
-        className="flex flex-col gap-3 rounded-lg border border-destructive/25 bg-destructive/5 p-4"
+        className="relative flex flex-col gap-4 overflow-hidden rounded-lg border border-destructive/30 bg-card p-4 shadow-[inset_3px_0_0_var(--color-destructive)] sm:p-5"
       >
         {/* Messages */}
         {messages.length > 0 ? (
@@ -95,9 +95,31 @@ export function AskSlate() {
             ))}
           </div>
         ) : (
-          <p className="mb-3 text-xs text-muted-foreground">
-            Ask about schedules, matchups, and broadcasts across all your sports.
-          </p>
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Your schedule desk</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Ask about home games, future opponents, start times, and broadcasts.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {["Are the Red Sox home next weekend?", "Who do the Bills play in Week 9?", "When is the next F1 race?"].map(
+                (question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => {
+                      setInput(question)
+                      inputRef.current?.focus()
+                    }}
+                    className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-foreground"
+                  >
+                    {question}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
         )}
 
         {/* Input */}
