@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { ExternalLink, Radio, Tv } from "lucide-react"
-import { BoxScore } from "@/components/box-score"
 import type { Game, ProbablePitcher } from "@/lib/espn"
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
@@ -166,8 +165,6 @@ export function GameCard({ game }: { game: Game }) {
           ))}
         </div>
       )}
-
-      <BoxScore game={game} />
 
       <div className="mt-auto flex items-start gap-2 border-t border-border pt-3">
         {game.state === "in" ? (
