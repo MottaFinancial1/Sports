@@ -7,6 +7,7 @@ import { AskSlate } from "@/components/ask-slate"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
 import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
+import { StandingsLeaderboard } from "@/components/standings-leaderboard"
 import { StarPerformers } from "@/components/star-performers"
 import {
   LEAGUES,
@@ -247,6 +248,14 @@ export function SportsGuide({
             ))}
           </div>
         </section>
+      ) : null}
+
+      {filter === "all" ? (
+        <>
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
+        </>
       ) : null}
 
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
