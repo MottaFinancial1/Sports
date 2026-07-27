@@ -55,7 +55,7 @@
 */
 :root {
   color-scheme: dark;
-  --background: oklch(0.16 0.012 158);
+  --background: oklch(0.14 0.014 22);
   --foreground: oklch(0.96 0.005 155);
   --card: oklch(0.24 0.012 157);
   --card-foreground: oklch(0.96 0.005 155);
@@ -95,17 +95,16 @@
   }
   body {
     @apply text-foreground;
-    /* Rich layered background: deep charcoal base + directional gradient for depth */
-    background-color: oklch(0.16 0.012 158);
+    background-color: oklch(0.14 0.014 22);
     background-image:
-      /* Ambient top glow — stadium floodlight effect */
-      radial-gradient(ellipse 120% 55% at 50% -10%, oklch(0.85 0.23 148 / 4%) 0%, transparent 65%),
-      /* Left edge warm accent */
-      radial-gradient(ellipse 50% 70% at -5% 60%, oklch(0.68 0.21 27 / 3%) 0%, transparent 55%),
-      /* Right edge cool depth */
-      radial-gradient(ellipse 55% 60% at 105% 45%, oklch(0.85 0.23 148 / 2%) 0%, transparent 55%),
-      /* Diagonal richness */
-      linear-gradient(160deg, oklch(0.20 0.014 160) 0%, oklch(0.16 0.010 155) 50%, oklch(0.18 0.012 158) 100%);
+      /* Strong red glow — top left corner, like stadium lights over the field */
+      radial-gradient(ellipse 90% 60% at -10% -5%, oklch(0.68 0.21 27 / 18%) 0%, transparent 55%),
+      /* Secondary red bloom — lower right */
+      radial-gradient(ellipse 70% 55% at 110% 110%, oklch(0.68 0.21 27 / 10%) 0%, transparent 55%),
+      /* Green accent center-top — stadium floodlight */
+      radial-gradient(ellipse 100% 40% at 50% -5%, oklch(0.85 0.23 148 / 5%) 0%, transparent 60%),
+      /* Base: warm near-black with a touch of red-brown */
+      linear-gradient(170deg, oklch(0.17 0.018 30) 0%, oklch(0.13 0.012 22) 50%, oklch(0.15 0.016 30) 100%);
     background-attachment: fixed;
     position: relative;
   }
