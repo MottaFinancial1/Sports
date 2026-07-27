@@ -1,79 +1,113 @@
 "use client"
 
-const LOCATIONS = [
-  {
-    code: "LAX",
-    position: "left-[8%] top-[28%]",
-    tone: "border-destructive/35 text-destructive/60",
-  },
-  {
-    code: "BOS",
-    position: "right-[6%] top-[18%]",
-    tone: "border-destructive/35 text-destructive/60",
-  },
-  {
-    code: "ATL",
-    position: "right-[12%] bottom-[20%]",
-    tone: "border-primary/30 text-primary/50",
-  },
-]
-
 /**
- * Baseball-themed backdrop with team location markers. Features a subtle
- * diamond pattern and stitching details reminiscent of a baseball field,
- * with team codes positioned at favorite locations without city labels.
+ * Full-viewport fixed backdrop. Renders a stylised baseball field diagram
+ * (foul lines, base paths, pitcher's mound, infield arc) in the lower-right
+ * quadrant so it anchors the design without obscuring the content column.
+ * No text labels — purely illustrative.
  */
 export function GeographicBackdrop() {
   return (
     <div
-      className="pointer-events-none fixed inset-0 z-0 hidden overflow-hidden lg:block"
+      className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
       aria-hidden="true"
     >
-      {/* Baseball diamond pattern SVG */}
+      {/* ── Baseball field illustration ─────────────────────────────── */}
+      {/*
+        Coordinate space: 900 × 900 viewBox.
+        Home plate sits at (450, 820). The diamond rotates 45° so foul lines
+        run toward upper-left and upper-right corners naturally.
+        All strokes use currentColor so they inherit the SVG's color class.
+      */}
       <svg
-        className="absolute inset-0 h-full w-full opacity-3"
-        preserveAspectRatio="xMidYMid slice"
-        viewBox="0 0 1200 800"
+        viewBox="0 0 900 900"
+        preserveAspectRatio="xMaxYMax meet"
+        className="absolute bottom-0 right-0 h-[700px] w-[700px] text-primary opacity-[0.055] lg:h-[820px] lg:w-[820px]"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
       >
-        {/* Repeating diamond pattern */}
-        <defs>
-          <pattern id="diamond-pattern" x="0" y="0" width="150" height="150" patternUnits="userSpaceOnUse">
-            <path
-              d="M 75 0 L 150 75 L 75 150 L 0 75 Z"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="0.5"
-              opacity="0.4"
-            />
-            <circle cx="75" cy="75" r="2" fill="currentColor" opacity="0.3" />
-          </pattern>
-        </defs>
-        <rect width="1200" height="800" fill="url(#diamond-pattern)" className="text-primary/20" />
+        {/* Foul lines extending from home plate toward the corners */}
+        <line x1="450" y1="820" x2="30"  y2="30"  stroke="currentColor" strokeWidth="1.5" />
+        <line x1="450" y1="820" x2="870" y2="30"  stroke="currentColor" strokeWidth="1.5" />
 
-        {/* Baseball stitching curves */}
-        <g stroke="currentColor" strokeWidth="0.8" fill="none" opacity="0.15" className="text-destructive/40">
-          <path d="M 100 600 Q 300 550, 500 600 T 900 600" />
-          <path d="M 150 200 Q 400 150, 650 200 T 1050 200" />
-        </g>
+        {/* Base paths — the 90-ft diamond */}
+        {/* Home → 1st → 2nd → 3rd → Home */}
+        <polygon
+          points="450,820 730,540 450,260 170,540"
+          stroke="currentColor"
+          strokeWidth="2"
+        />
+
+        {/* Bases (small squares rotated 45°) */}
+        {[
+          [730, 540], // 1st base
+          [450, 260], // 2nd base
+          [170, 540], // 3rd base
+        ].map(([cx, cy], i) => (
+          <rect
+            key={i}
+            x={cx - 10}
+            y={cy - 10}
+            width={20}
+            height={20}
+            transform={`rotate(45 ${cx} ${cy})`}
+            stroke="currentColor"
+            strokeWidth="1.5"
+          />
+        ))}
+
+        {/* Home plate — pentagon */}
+        <polygon
+          points="450,840 465,825 465,808 435,808 435,825"
+          stroke="currentColor"
+          strokeWidth="1.5"
+        />
+
+        {/* Pitcher's mound circle */}
+        <circle cx="450" cy="540" r="22" stroke="currentColor" strokeWidth="1.5" />
+
+        {/* Infield arc (grass line) */}
+        <path
+          d="M 210,570 Q 450,330 690,570"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeDasharray="6 5"
+        />
+
+        {/* Outfield warning-track arc */}
+        <path
+          d="M 80,680 Q 450,100 820,680"
+          stroke="currentColor"
+          strokeWidth="1"
+          strokeDasharray="8 6"
+        />
+
+        {/* Second (outer) outfield arc */}
+        <path
+          d="M 55,720 Q 450,60 845,720"
+          stroke="currentColor"
+          strokeWidth="0.7"
+          strokeDasharray="5 7"
+        />
+
+        {/* Batter's boxes (left & right of home) */}
+        <rect x="415" y="808" width="20" height="32" stroke="currentColor" strokeWidth="1" />
+        <rect x="465" y="808" width="20" height="32" stroke="currentColor" strokeWidth="1" />
+
+        {/* Coaching boxes — faint rectangles near 1st and 3rd */}
+        <rect x="680" y="590" width="40" height="60" stroke="currentColor" strokeWidth="0.8" opacity="0.6" />
+        <rect x="180" y="590" width="40" height="60" stroke="currentColor" strokeWidth="0.8" opacity="0.6" />
       </svg>
 
-      {/* Subtle grid lines for data aesthetic */}
-      <div className="absolute inset-y-0 left-1/3 w-px bg-gradient-to-b from-border/8 via-border/4 to-transparent" />
-      <div className="absolute inset-y-0 right-1/3 w-px bg-gradient-to-b from-transparent via-border/4 to-border/8" />
-      <div className="absolute inset-x-0 top-1/3 h-px bg-gradient-to-r from-border/8 via-border/4 to-transparent" />
-      <div className="absolute inset-x-0 bottom-1/3 h-px bg-gradient-to-r from-transparent via-border/4 to-border/8" />
-
-      {/* Team location markers */}
-      {LOCATIONS.map((location) => (
-        <div key={location.code} className={`absolute ${location.position} opacity-80`}>
-          <div className={`relative border-l-2 pl-4 font-mono ${location.tone}`}>
-            <span className="absolute -left-1.5 top-1 h-2.5 w-2.5 rounded-full border border-current bg-background/50" />
-            <p className="text-[12px] font-bold uppercase tracking-[0.24em] leading-tight">
-              {location.code}
-            </p>
-          </div>
-        </div>
-      ))}
+      {/* ── Horizontal scan line grid (data-terminal aesthetic) ──────── */}
+      <div
+        className="absolute inset-0 opacity-[0.018]"
+        style={{
+          backgroundImage:
+            "repeating-linear-gradient(0deg, transparent, transparent 28px, currentColor 28px, currentColor 29px)",
+        }}
+      />
     </div>
   )
 }
