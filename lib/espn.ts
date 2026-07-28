@@ -66,6 +66,17 @@ export interface ProbablePitcher {
   era?: string // e.g. "2.13"
 }
 
+export interface GameSituation {
+  balls: number
+  strikes: number
+  outs: number
+  onFirst: boolean
+  onSecond: boolean
+  onThird: boolean
+  pitcher?: { name: string; shortName: string; era?: string; pitchCount?: number }
+  batter?: { name: string; shortName: string; avg?: string } // avg = today's line e.g. "1-3"
+}
+
 export interface Competitor {
   name: string
   shortName: string
@@ -97,6 +108,7 @@ export interface Game {
   week?: number // NFL/NCAAF week number
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
   leaders?: GameLeader[] // Star performers (populated for live games)
+  situation?: GameSituation // Live at-bat situation (baseball only)
 }
 
 export interface GameLeader {
@@ -125,6 +137,18 @@ interface EspnEvent {
   groupings?: { competitions?: EspnCompetition[] }[]
 }
 
+interface EspnSituationPlayer {
+  playerId?: number
+  pitchCount?: number
+  summary?: string  // e.g. "0.0 IP, 0 ER" for pitchers, "0-2" for batters
+  athlete?: {
+    displayName?: string
+    shortName?: string
+    headshot?: string
+    position?: string
+  }
+}
+
 interface EspnCompetition {
   date?: string
   venue?: { fullName?: string }
@@ -133,6 +157,17 @@ interface EspnCompetition {
   notes?: { headline?: string }[]
   status?: { type?: { state?: string; shortDetail?: string; detail?: string } }
   competitors?: EspnCompetitor[]
+  situation?: {
+    balls?: number
+    strikes?: number
+    outs?: number
+    onFirst?: boolean
+    onSecond?: boolean
+    onThird?: boolean
+    pitcher?: EspnSituationPlayer
+    batter?: EspnSituationPlayer
+    lastPlay?: { text?: string }
+  }
 }
 
 interface EspnProbable {
@@ -260,12 +295,47 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
             (event.links ?? []).find((l) => l.text === "Box Score")?.href ??
             event.links?.[0]?.href,
           leaders: state === "in" ? extractLeaders(comp) : undefined,
+          situation: state === "in" && league.category === "Baseball" ? extractSituation(comp) : undefined,
         })
       })
     }
     return games
   } catch {
     return []
+  }
+}
+
+function extractSituation(comp: EspnCompetition): GameSituation | undefined {
+  const s = comp.situation
+  if (!s) return undefined
+
+  // Parse ERA from pitcher summary string like "0.0 IP, 0 ER, 0 H, 0 BB"
+  // and batter summary like "1-3" (hits-ABs)
+  const pitcherAthlete = s.pitcher?.athlete
+  const batterAthlete = s.batter?.athlete
+
+  return {
+    balls: s.balls ?? 0,
+    strikes: s.strikes ?? 0,
+    outs: s.outs ?? 0,
+    onFirst: s.onFirst ?? false,
+    onSecond: s.onSecond ?? false,
+    onThird: s.onThird ?? false,
+    pitcher: pitcherAthlete?.displayName
+      ? {
+          name: pitcherAthlete.displayName,
+          shortName: pitcherAthlete.shortName ?? pitcherAthlete.displayName,
+          era: undefined, // summary is per-game stats, ERA not included
+          pitchCount: s.pitcher?.pitchCount,
+        }
+      : undefined,
+    batter: batterAthlete?.displayName
+      ? {
+          name: batterAthlete.displayName,
+          shortName: batterAthlete.shortName ?? batterAthlete.displayName,
+          avg: s.batter?.summary ?? undefined, // e.g. "1-3" today
+        }
+      : undefined,
   }
 }
 
