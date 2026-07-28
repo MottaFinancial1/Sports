@@ -189,7 +189,7 @@ export function SportsGuide({
           </p>
         </div>
 
-        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4 ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
+        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
           <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
           <BriefingStat
             icon={Flame}
@@ -198,8 +198,6 @@ export function SportsGuide({
             highlight={liveCount > 0}
             onClick={liveCount > 0 ? () => setFilter("live") : undefined}
           />
-          <BriefingStat icon={Clock} label="Next start" value={nextUp || "…"} />
-          <BriefingStat icon={CalendarDays} label="Finished" value={String(finalCount)} />
         </div>
       </header>
 
@@ -233,6 +231,32 @@ export function SportsGuide({
         />
       ) : null}
 
+      {filter === "all" || filter === "live" ? (
+        <section className="mb-10">
+          <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-destructive">
+            <Flame className="h-3.5 w-3.5" aria-hidden="true" />
+            Live Games Now
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+          </h2>
+          {games.filter((g) => g.state === "in").length > 0 ? (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {games
+                .filter((g) => g.state === "in")
+                .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category))
+                .map((g) => (
+                  <GameCard key={g.id} game={g} />
+                ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
+              <p className="text-sm text-muted-foreground">No live games at the moment</p>
+            </div>
+          )}
+        </section>
+      ) : null}
+
+      {filter === "all" ? <SportsNews articles={news} /> : null}
+
       {filter === "all" ? <AskSlate /> : null}
 
       {filter === "all" && favoriteGames.length > 0 ? (
@@ -260,8 +284,6 @@ export function SportsGuide({
 
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 
-      {filter === "all" ? <SportsNews articles={news} /> : null}
-
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
           <p className="text-lg font-semibold text-foreground">No games match this filter</p>
@@ -283,21 +305,32 @@ export function SportsGuide({
                 <span className="h-px flex-1 bg-border" aria-hidden="true" />
               </h2>
               <div className="flex flex-col gap-6">
-                {leagues.map(({ league, games: leagueGames }) => (
-                  <div key={league.id}>
-                    <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
-                      {league.label}
-                      <span className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
-                        {String(leagueGames.length).padStart(2, "0")}
-                      </span>
-                    </h3>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {leagueGames.map((g) => (
-                        <GameCard key={g.id} game={g} />
-                      ))}
+                {leagues.map(({ league, games: leagueGames }) => {
+                  const liveLeagueGames = leagueGames.filter((g) => g.state === "in")
+                  return (
+                    <div key={league.id}>
+                      <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
+                        {league.label}
+                        <span className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
+                          {liveLeagueGames.length > 0 && (
+                            <span className="text-destructive">
+                              {String(liveLeagueGames.length).padStart(2, "0")} live
+                              {liveLeagueGames.length !== leagueGames.length && " / "}
+                            </span>
+                          )}
+                          {liveLeagueGames.length !== leagueGames.length && (
+                            <span>{String(leagueGames.length).padStart(2, "0")} total</span>
+                          )}
+                        </span>
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {leagueGames.map((g) => (
+                          <GameCard key={g.id} game={g} />
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </section>
           ))}

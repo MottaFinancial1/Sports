@@ -55,19 +55,19 @@
 */
 :root {
   color-scheme: dark;
-  --background: oklch(0.22 0.01 155);
+  --background: oklch(0.14 0.014 22);
   --foreground: oklch(0.96 0.005 155);
-  --card: oklch(0.28 0.012 155);
+  --card: oklch(0.24 0.012 157);
   --card-foreground: oklch(0.96 0.005 155);
-  --popover: oklch(0.28 0.012 155);
+  --popover: oklch(0.24 0.012 157);
   --popover-foreground: oklch(0.96 0.005 155);
   --primary: oklch(0.85 0.23 148);
   --primary-foreground: oklch(0.22 0.01 155);
-  --secondary: oklch(0.35 0.015 155);
+  --secondary: oklch(0.30 0.014 157);
   --secondary-foreground: oklch(0.96 0.005 155);
-  --muted: oklch(0.35 0.015 155);
-  --muted-foreground: oklch(0.75 0.02 155);
-  --accent: oklch(0.35 0.015 155);
+  --muted: oklch(0.30 0.014 157);
+  --muted-foreground: oklch(0.72 0.018 155);
+  --accent: oklch(0.30 0.014 157);
   --accent-foreground: oklch(0.96 0.005 155);
   --destructive: oklch(0.68 0.21 27);
   --border: oklch(1 0 0 / 18%);
@@ -94,7 +94,19 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply text-foreground;
+    background-color: oklch(0.14 0.014 22);
+    background-image:
+      /* Strong red glow — top left corner, like stadium lights over the field */
+      radial-gradient(ellipse 90% 60% at -10% -5%, oklch(0.68 0.21 27 / 18%) 0%, transparent 55%),
+      /* Secondary red bloom — lower right */
+      radial-gradient(ellipse 70% 55% at 110% 110%, oklch(0.68 0.21 27 / 10%) 0%, transparent 55%),
+      /* Green accent center-top — stadium floodlight */
+      radial-gradient(ellipse 100% 40% at 50% -5%, oklch(0.85 0.23 148 / 5%) 0%, transparent 60%),
+      /* Base: warm near-black with a touch of red-brown */
+      linear-gradient(170deg, oklch(0.17 0.018 30) 0%, oklch(0.13 0.012 22) 50%, oklch(0.15 0.016 30) 100%);
+    background-attachment: fixed;
+    position: relative;
   }
 
   ::selection {

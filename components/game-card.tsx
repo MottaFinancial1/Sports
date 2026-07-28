@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { ExternalLink, Radio, Tv } from "lucide-react"
-import type { Game, ProbablePitcher } from "@/lib/espn"
+import type { Game, GameSituation, ProbablePitcher } from "@/lib/espn"
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   const [label, setLabel] = useState<string>("")
@@ -108,6 +108,89 @@ function TeamRow({
   )
 }
 
+function BaseDiamond({ onFirst, onSecond, onThird }: { onFirst: boolean; onSecond: boolean; onThird: boolean }) {
+  const base = (on: boolean) =>
+    `h-2.5 w-2.5 rotate-45 border ${on ? "bg-destructive border-destructive" : "border-muted-foreground/40 bg-transparent"}`
+  return (
+    <div className="relative h-8 w-8 shrink-0">
+      {/* Second base — top center */}
+      <span className={`${base(onSecond)} absolute left-1/2 top-0 -translate-x-1/2`} />
+      {/* Third base — left */}
+      <span className={`${base(onThird)} absolute bottom-0 left-0`} />
+      {/* First base — right */}
+      <span className={`${base(onFirst)} absolute bottom-0 right-0`} />
+    </div>
+  )
+}
+
+function BaseballSituation({ situation }: { situation: GameSituation }) {
+  return (
+    <div className="rounded-md border border-border/60 bg-secondary/40 px-3 py-2.5">
+      {/* Pitcher / Batter row */}
+      <div className="mb-2 grid grid-cols-2 gap-x-3 text-xs">
+        {situation.pitcher && (
+          <div className="min-w-0">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">Pitching</span>
+            <p className="truncate font-semibold text-foreground leading-tight mt-0.5">
+              {situation.pitcher.shortName}
+            </p>
+            <p className="font-mono text-[10px] text-muted-foreground leading-tight">
+              {[
+                situation.pitcher.era ? `${situation.pitcher.era} ERA` : null,
+                situation.pitcher.pitchCount != null ? `${situation.pitcher.pitchCount}p` : null,
+              ]
+                .filter(Boolean)
+                .join(" · ") || "—"}
+            </p>
+          </div>
+        )}
+        {situation.batter && (
+          <div className="min-w-0">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground">At bat</span>
+            <p className="truncate font-semibold text-foreground leading-tight mt-0.5">
+              {situation.batter.shortName}
+            </p>
+            <p className="font-mono text-[10px] text-muted-foreground leading-tight">
+              {situation.batter.avg ? situation.batter.avg : "—"}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Count + runners */}
+      <div className="flex items-center gap-3">
+        {/* Count */}
+        <div className="flex items-center gap-1 font-mono text-xs">
+          <span className="text-muted-foreground">Count</span>
+          <span className="font-bold text-foreground tabular-nums">
+            {situation.balls}-{situation.strikes}
+          </span>
+        </div>
+        {/* Outs */}
+        <div className="flex items-center gap-1">
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              className={`h-2 w-2 rounded-full ${i < situation.outs ? "bg-destructive" : "border border-muted-foreground/40"}`}
+            />
+          ))}
+          <span className="ml-0.5 font-mono text-[10px] text-muted-foreground">
+            {situation.outs} {situation.outs === 1 ? "out" : "outs"}
+          </span>
+        </div>
+        {/* Base diamond */}
+        <div className="ml-auto">
+          <BaseDiamond
+            onFirst={situation.onFirst}
+            onSecond={situation.onSecond}
+            onThird={situation.onThird}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function GameCard({ game }: { game: Game }) {
   const showScore = game.state !== "pre"
   const isEvent = game.competitors.length !== 2
@@ -163,6 +246,9 @@ export function GameCard({ game }: { game: Game }) {
               pitcher={game.state === "pre" ? c.probablePitcher : undefined}
             />
           ))}
+          {game.state === "in" && game.situation && (
+            <BaseballSituation situation={game.situation} />
+          )}
         </div>
       )}
 
