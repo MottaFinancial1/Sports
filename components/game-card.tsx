@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { ExternalLink, Radio, Tv } from "lucide-react"
 import type { Game, ProbablePitcher } from "@/lib/espn"
+import { recordTeamView } from "@/lib/team-views"
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   const [label, setLabel] = useState<string>("")
@@ -190,12 +191,19 @@ export function GameCard({ game }: { game: Game }) {
     </article>
   )
 
+  const teamNames = game.competitors.map((c) => c.name)
+
+  const handleClick = () => {
+    recordTeamView(teamNames)
+  }
+
   if (game.link) {
     return (
       <a
         href={game.link}
         target="_blank"
         rel="noopener noreferrer"
+        onClick={handleClick}
         aria-label={`${game.shortName || game.name} — open live stats and box score`}
         className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
@@ -204,5 +212,5 @@ export function GameCard({ game }: { game: Game }) {
     )
   }
 
-  return card
+  return <div onClick={handleClick}>{card}</div>
 }

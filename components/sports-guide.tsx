@@ -18,6 +18,7 @@ import {
   type SportsData,
   type StatcastHighlight,
 } from "@/lib/espn"
+import { getTeamViews, gameViewScore, type TeamViewMap } from "@/lib/team-views"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
@@ -72,6 +73,12 @@ export function SportsGuide({
   const [updated, setUpdated] = useState<string>("")
   const [greeting, setGreeting] = useState<{ text: string; Icon: typeof Sunrise } | null>(null)
   const [nextUp, setNextUp] = useState<string>("")
+  const [teamViews, setTeamViews] = useState<TeamViewMap>({})
+
+  // Load view counts from localStorage once on mount.
+  useEffect(() => {
+    setTeamViews(getTeamViews())
+  }, [])
 
   useEffect(() => {
     const now = new Date()
@@ -105,9 +112,27 @@ export function SportsGuide({
 
   const favoriteGames = useMemo(
     () =>
-      games.filter(isFavoriteGame).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [games],
+      games.filter(isFavoriteGame).sort((a, b) => {
+        const viewDiff =
+          gameViewScore(b.competitors.map((c) => c.name), teamViews) -
+          gameViewScore(a.competitors.map((c) => c.name), teamViews)
+        if (viewDiff !== 0) return viewDiff
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
+      }),
+    [games, teamViews],
   )
+
+  // Top non-favorite teams the user watches most (at least 1 view).
+  const mostWatchedGames = useMemo(() => {
+    if (Object.keys(teamViews).length === 0) return []
+    return games
+      .filter((g) => !isFavoriteGame(g))
+      .map((g) => ({ game: g, score: gameViewScore(g.competitors.map((c) => c.name), teamViews) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map(({ game }) => game)
+  }, [games, teamViews])
 
   const filtered = useMemo(() => {
     if (filter === "all") return games
@@ -133,7 +158,14 @@ export function SportsGuide({
       byCategory.set(g.category, catArr)
     }
     for (const arr of byLeague.values()) {
-      arr.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      arr.sort((a, b) => {
+        // Most-viewed teams bubble up; ties broken by start time.
+        const viewDiff =
+          gameViewScore(b.competitors.map((c) => c.name), teamViews) -
+          gameViewScore(a.competitors.map((c) => c.name), teamViews)
+        if (viewDiff !== 0) return viewDiff
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
+      })
     }
 
     const ordered = orderCategories(
@@ -152,7 +184,7 @@ export function SportsGuide({
         }
       })
       .filter((c) => c.leagues.length > 0)
-  }, [filtered])
+  }, [filtered, teamViews])
 
   const GreetingIcon = greeting?.Icon ?? Sunrise
 
@@ -220,7 +252,20 @@ export function SportsGuide({
         />
       ) : null}
 
-      {filter === "all" ? <AskSlate /> : null}
+      {filter === "all" && mostWatchedGames.length > 0 ? (
+        <section className="mb-10">
+          <h2 className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+            <span className="inline-block h-3 w-1 bg-primary" aria-hidden="true" />
+            Most Watched
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {mostWatchedGames.map((g) => (
+              <GameCard key={`mw-${g.id}`} game={g} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {filter === "all" && favoriteGames.length > 0 ? (
         <section className="mb-10">
@@ -236,6 +281,8 @@ export function SportsGuide({
           </div>
         </section>
       ) : null}
+
+      {filter === "all" ? <AskSlate /> : null}
 
       {filter === "all" ? (
         <>
