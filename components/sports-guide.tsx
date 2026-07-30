@@ -158,19 +158,27 @@ export function SportsGuide({
 
   return (
     <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
-      {/* Terminal-style status bar */}
-      <div className="-mx-4 flex items-center justify-between gap-3 border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground sm:-mx-6 sm:px-6">
-        <span className="flex items-center gap-1.5">
-          <GreetingIcon className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          {greeting?.text ?? "Hello"}
+      {/* Status bar */}
+      <div className="-mx-4 grid grid-cols-[1fr_auto_1fr] items-center border-b border-border px-4 py-3 sm:-mx-6 sm:px-6">
+        {/* Left — greeting */}
+        <span className="flex items-center gap-2">
+          <GreetingIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
+            {greeting?.text ?? "Hello"}
+          </span>
         </span>
-        <span className="hidden items-center gap-1.5 sm:flex">
-          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-          {today || "Loading…"}
+
+        {/* Center — date, prominent */}
+        <span className="font-mono text-sm font-extrabold uppercase tracking-widest text-foreground">
+          {today || "—"}
         </span>
-        <span className="flex items-center gap-1.5 text-primary">
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          Synced {updated || "…"}
+
+        {/* Right — sync, amber */}
+        <span className="flex items-center justify-end gap-2 text-primary">
+          <RefreshCw className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em]">
+            {updated || "—"}
+          </span>
         </span>
       </div>
 
