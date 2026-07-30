@@ -159,61 +159,53 @@ export function SportsGuide({
   return (
     <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
       {/* Status bar */}
-      <div className="-mx-4 grid grid-cols-[1fr_auto_1fr] items-center border-b border-border px-4 py-3 sm:-mx-6 sm:px-6">
-        {/* Left — greeting */}
-        <span className="flex items-center gap-2">
-          <GreetingIcon className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-            {greeting?.text ?? "Hello"}
+      <div className="-mx-4 grid grid-cols-[1fr_auto_1fr] items-center border-b border-border px-4 py-2.5 sm:-mx-6 sm:px-6">
+        {/* Left — greeting icon + short label */}
+        <span className="flex items-center gap-1.5">
+          <GreetingIcon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground/60">
+            {greeting?.text ?? "—"}
           </span>
         </span>
 
-        {/* Center — date, prominent */}
-        <span className="font-mono text-sm font-extrabold uppercase tracking-widest text-foreground">
+        {/* Center — date */}
+        <span className="font-mono text-xs font-bold uppercase tracking-widest text-foreground/80">
           {today || "—"}
         </span>
 
-        {/* Right — sync, amber */}
-        <span className="flex items-center justify-end gap-2 text-primary">
-          <RefreshCw className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span className="font-mono text-[11px] font-bold uppercase tracking-[0.2em]">
+        {/* Right — sync time only */}
+        <span className="flex items-center justify-end gap-1.5 text-primary/70">
+          <RefreshCw className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]">
             {updated || "—"}
           </span>
         </span>
       </div>
 
-      <header className="flex flex-col gap-5 pt-7 sm:pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-primary pl-4">
-          <div>
-            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
-              Personalized sports intelligence
-            </p>
-            <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-              Ball<span className="text-primary">_</span>Knowledge
-            </h1>
-          </div>
-          <p className="max-w-xs text-pretty text-sm leading-relaxed text-muted-foreground">
-            Live scores, standout performances, and the next events worth your attention.
-          </p>
+      <header className="flex flex-col gap-5 pt-8 sm:pt-12">
+        <div className="border-l-2 border-primary pl-4">
+          <h1 className="font-mono text-5xl font-black uppercase leading-none tracking-tighter text-foreground sm:text-7xl">
+            Ball<span className="text-primary">_</span>Knowledge
+          </h1>
         </div>
 
         <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4 ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
-          <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
+          <BriefingStat icon={Trophy} label="Today" value={String(games.length)} />
           <BriefingStat
             icon={Flame}
-            label="Live now"
+            label="Live"
             value={String(liveCount)}
             highlight={liveCount > 0}
             onClick={liveCount > 0 ? () => setFilter("live") : undefined}
           />
-          <BriefingStat icon={Clock} label="Next start" value={nextUp || "…"} />
-          <BriefingStat icon={CalendarDays} label="Finished" value={String(finalCount)} />
+          <BriefingStat icon={Clock} label="Next" value={nextUp || "—"} />
+          <BriefingStat icon={CalendarDays} label="Final" value={String(finalCount)} />
         </div>
       </header>
 
       <nav
         aria-label="Filter by league"
-        className="sticky top-0 z-10 -mx-4 mb-6 mt-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
+        className="sticky top-0 z-10 -mx-4 mb-6 mt-4 flex gap-1.5 overflow-x-auto border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6"
       >
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
           All ({games.length})
@@ -245,9 +237,9 @@ export function SportsGuide({
 
       {filter === "all" && favoriteGames.length > 0 ? (
         <section className="mb-10">
-          <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
-            <Star className="h-3.5 w-3.5 fill-primary" aria-hidden="true" />
-            Favorite Teams
+          <h2 className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+            <Star className="h-3 w-3 fill-primary" aria-hidden="true" />
+            Favorites
             <span className="h-px flex-1 bg-border" aria-hidden="true" />
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -272,16 +264,14 @@ export function SportsGuide({
 
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
-          <p className="text-lg font-semibold text-foreground">No games match this filter</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Try another league, or check back — the schedule refreshes automatically.
-          </p>
+          <p className="font-mono text-sm font-bold uppercase tracking-widest text-foreground">No games</p>
+          <p className="mt-1 font-mono text-xs text-muted-foreground/60">Refreshes automatically.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-10">
           {grouped.map(({ category, status, leagues }) => (
             <section key={category} className={status === "done" || status === "scheduled" ? "opacity-75" : ""}>
-              <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              <h2 className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50">
                 <span
                   className={`inline-block h-3 w-1 ${status === "live" ? "bg-destructive" : "bg-primary"}`}
                   aria-hidden="true"
@@ -356,12 +346,12 @@ function BriefingStat({
 }) {
   const inner = (
     <>
-      <span className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-        <Icon className={`h-3 w-3 ${highlight ? "live-dot text-destructive" : "text-primary"}`} aria-hidden="true" />
+      <span className="flex items-center gap-1 font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50">
+        <Icon className={`h-2.5 w-2.5 ${highlight ? "live-dot text-destructive" : "text-primary"}`} aria-hidden="true" />
         {label}
       </span>
       <span
-        className={`mt-1.5 font-mono text-2xl font-extrabold tabular-nums leading-none ${
+        className={`mt-1 font-mono text-3xl font-black tabular-nums leading-none ${
           highlight ? "text-destructive" : "text-foreground"
         }`}
       >
@@ -400,7 +390,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-sm border px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] transition-colors ${
         active
           ? "border-primary bg-primary text-primary-foreground"
           : highlight
