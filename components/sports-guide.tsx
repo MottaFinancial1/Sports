@@ -122,6 +122,19 @@ export function SportsGuide({
     [games, teamViews],
   )
 
+  // Show standings before news/statcast when a live tournament or playoff race is happening:
+  // — a PGA or F1 game is actively in-progress, OR
+  // — it's MLB playoff season (September or October).
+  const standingsFirst = useMemo(() => {
+    const now = new Date()
+    const month = now.getMonth() + 1 // 1-indexed
+    const mlbPlayoffs = month >= 9 && month <= 10
+    const liveTournament = games.some(
+      (g) => g.state === "in" && (g.leagueId === "pga" || g.leagueId === "f1"),
+    )
+    return liveTournament || mlbPlayoffs
+  }, [games])
+
   // Top non-favorite teams the user watches most (at least 1 view).
   const mostWatchedGames = useMemo(() => {
     if (Object.keys(teamViews).length === 0) return []
@@ -284,7 +297,8 @@ export function SportsGuide({
 
       {filter === "all" ? <AskSlate /> : null}
 
-      {filter === "all" ? (
+      {/* Standings-first when a live tournament or MLB playoffs are active */}
+      {filter === "all" && standingsFirst ? (
         <>
           <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
           <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
@@ -295,6 +309,15 @@ export function SportsGuide({
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 
       {filter === "all" ? <SportsNews articles={news} /> : null}
+
+      {/* Standings after news/statcast in the default case */}
+      {filter === "all" && !standingsFirst ? (
+        <>
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
+        </>
+      ) : null}
 
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
