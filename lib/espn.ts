@@ -586,19 +586,222 @@ export async function getStatcastHighlights(): Promise<StatcastHighlight[]> {
   }
 }
 
+// ---------- Live standings / leaderboards ----------
+
+export interface StandingsEntry {
+  position: number
+  name: string
+  shortName: string
+  points?: number          // F1 championship points
+  wins?: number            // MLB wins
+  losses?: number          // MLB losses
+  gamesBack?: string       // MLB GB
+  score?: number           // PGA total score
+  parDiff?: string         // PGA vs par (e.g. "-12")
+  logo?: string
+  division?: string        // MLB division name
+}
+
+export interface LeagueStandings {
+  leagueId: "f1" | "mlb" | "pga"
+  updatedAt: string
+  entries: StandingsEntry[]
+  divisions?: { name: string; entries: StandingsEntry[] }[] // MLB only
+}
+
+// ---- F1 Drivers Championship ----
+interface EspnF1StandingsAthlete {
+  displayName?: string
+  shortName?: string
+  flag?: { href?: string }
+  team?: { shortDisplayName?: string; logo?: string }
+}
+
+interface EspnF1StandingsEntry {
+  athlete?: EspnF1StandingsAthlete
+  team?: { shortDisplayName?: string; logo?: string }
+  stats?: { name?: string; displayValue?: string }[]
+}
+
+interface EspnF1StandingsResponse {
+  standings?: {
+    entries?: EspnF1StandingsEntry[]
+  }[]
+}
+
+async function fetchF1DriverStandings(): Promise<StandingsEntry[]> {
+  const url = "https://site.web.api.espn.com/apis/v2/sports/racing/f1/standings?season=2025&type=0"
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as EspnF1StandingsResponse
+    const entries: StandingsEntry[] = []
+    for (const group of data.standings ?? []) {
+      for (const e of group.entries ?? []) {
+        const pts = e.stats?.find((s) => s.name === "points")?.displayValue
+        entries.push({
+          position: entries.length + 1,
+          name: e.athlete?.displayName ?? e.team?.shortDisplayName ?? "Unknown",
+          shortName: e.athlete?.shortName ?? e.athlete?.displayName ?? "TBD",
+          points: pts ? parseFloat(pts) : undefined,
+          logo: e.athlete?.flag?.href ?? e.team?.logo,
+        })
+      }
+    }
+    return entries
+  } catch {
+    return []
+  }
+}
+
+// ---- MLB Standings ----
+interface EspnMLBStandingsTeam {
+  displayName?: string
+  shortDisplayName?: string
+  abbreviation?: string
+  logos?: { href?: string }[]
+}
+
+interface EspnMLBStandingsEntry {
+  team?: EspnMLBStandingsTeam
+  stats?: { name?: string; displayValue?: string; value?: number }[]
+}
+
+interface EspnMLBStandingsGroup {
+  name?: string // e.g. "AL East"
+  standings?: { entries?: EspnMLBStandingsEntry[] }
+}
+
+interface EspnMLBStandingsResponse {
+  children?: EspnMLBStandingsGroup[]
+  standings?: { entries?: EspnMLBStandingsEntry[] }
+}
+
+async function fetchMLBStandings(): Promise<{ name: string; entries: StandingsEntry[] }[]> {
+  const url = "https://site.api.espn.com/apis/v2/sports/baseball/mlb/standings"
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as EspnMLBStandingsResponse
+    const divisionOrder = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"]
+    const groups = data.children ?? []
+    const result: { name: string; entries: StandingsEntry[] }[] = []
+    for (const group of groups) {
+      const divName = group.name ?? ""
+      const rawEntries = group.standings?.entries ?? []
+      const entries: StandingsEntry[] = rawEntries.map((e, i) => {
+        const stat = (name: string) => e.stats?.find((s) => s.name === name)
+        const wins = stat("wins")?.value ?? 0
+        const losses = stat("losses")?.value ?? 0
+        const gb = stat("gamesBehind")?.displayValue
+        return {
+          position: i + 1,
+          name: e.team?.displayName ?? "Unknown",
+          shortName: e.team?.abbreviation ?? e.team?.shortDisplayName ?? "TBD",
+          wins: Math.round(wins),
+          losses: Math.round(losses),
+          gamesBack: gb,
+          logo: e.team?.logos?.[0]?.href,
+          division: divName,
+        }
+      })
+      // Sort by wins desc, losses asc
+      entries.sort((a, b) => (b.wins ?? 0) - (a.wins ?? 0) || (a.losses ?? 0) - (b.losses ?? 0))
+      entries.forEach((e, i) => { e.position = i + 1 })
+      result.push({ name: divName, entries })
+    }
+    // Sort divisions in canonical order
+    result.sort((a, b) => {
+      const ai = divisionOrder.indexOf(a.name)
+      const bi = divisionOrder.indexOf(b.name)
+      return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi)
+    })
+    return result
+  } catch {
+    return []
+  }
+}
+
+// ---- PGA Leaderboard ----
+interface EspnPGACompetitor {
+  displayName?: string
+  shortName?: string
+  flag?: { href?: string }
+  headshot?: { href?: string }
+  linescores?: { displayValue?: string }[]
+  statistics?: { name?: string; displayValue?: string }[]
+  status?: { period?: number; type?: { state?: string } }
+}
+
+interface EspnPGAResponse {
+  competitors?: EspnPGACompetitor[]
+}
+
+async function fetchPGALeaderboard(): Promise<StandingsEntry[]> {
+  const url = "https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard"
+  try {
+    const res = await fetch(url, {
+      next: { revalidate: 120 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as EspnPGAResponse
+    return (data.competitors ?? []).slice(0, 15).map((c, i) => {
+      const toPar = c.statistics?.find((s) => s.name === "toPar")?.displayValue
+        ?? c.linescores?.map((l) => l.displayValue).join("/")
+      const totalScore = c.statistics?.find((s) => s.name === "score")?.displayValue
+      return {
+        position: i + 1,
+        name: c.displayName ?? "Unknown",
+        shortName: c.shortName ?? c.displayName ?? "TBD",
+        parDiff: toPar,
+        score: totalScore ? parseInt(totalScore) : undefined,
+        logo: c.flag?.href ?? c.headshot?.href,
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+export async function getAllStandings(): Promise<{
+  f1: StandingsEntry[]
+  mlbDivisions: { name: string; entries: StandingsEntry[] }[]
+  pga: StandingsEntry[]
+}> {
+  const [f1, mlbDivisions, pga] = await Promise.all([
+    fetchF1DriverStandings(),
+    fetchMLBStandings(),
+    fetchPGALeaderboard(),
+  ])
+  return { f1, mlbDivisions, pga }
+}
+
 export interface SportsData {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
   fetchedAt: string
+  standings: {
+    f1: StandingsEntry[]
+    mlbDivisions: { name: string; entries: StandingsEntry[] }[]
+    pga: StandingsEntry[]
+  }
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const [results, news, statcast] = await Promise.all([
+  const [results, news, statcast, standings] = await Promise.all([
     Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league)))),
     getTopNews(),
     getStatcastHighlights(),
+    getAllStandings(),
   ])
   const games = results.flat()
-  return { games, news, statcast, fetchedAt: new Date().toISOString() }
+  return { games, news, statcast, fetchedAt: new Date().toISOString(), standings }
 }

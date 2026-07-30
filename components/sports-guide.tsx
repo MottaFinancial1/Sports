@@ -7,7 +7,7 @@ import { AskSlate } from "@/components/ask-slate"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
 import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
-import { StandingsLeaderboard } from "@/components/standings-leaderboard"
+import { F1StandingsLeaderboard, MLBStandingsLeaderboard, PGALeaderboard } from "@/components/standings-leaderboard"
 import { StarPerformers } from "@/components/star-performers"
 import {
   LEAGUES,
@@ -46,17 +46,19 @@ export function SportsGuide({
   news: initialNews,
   statcast: initialStatcast,
   fetchedAt: initialFetchedAt,
+  standings: initialStandings,
 }: {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
   fetchedAt: string
+  standings: SportsData["standings"]
 }) {
   // Poll for fresh data every 60s, revalidate when the tab regains focus or
   // the network reconnects, and keep polling in background tabs. The
   // server-rendered payload seeds the cache so there is never a blank state.
   const { data } = useSWR<SportsData>("/api/games", fetcher, {
-    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, fetchedAt: initialFetchedAt },
+    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, fetchedAt: initialFetchedAt, standings: initialStandings },
     refreshInterval: 60_000,
     refreshWhenHidden: true,
     revalidateOnFocus: true,
@@ -66,6 +68,7 @@ export function SportsGuide({
   const news = data?.news ?? initialNews
   const statcast = data?.statcast ?? initialStatcast
   const fetchedAt = data?.fetchedAt ?? initialFetchedAt
+  const standings = data?.standings ?? initialStandings
 
   const [filter, setFilter] = useState<Filter>("all")
   const [today, setToday] = useState<string>("")
@@ -252,9 +255,9 @@ export function SportsGuide({
 
       {filter === "all" ? (
         <>
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
+          <F1StandingsLeaderboard entries={standings.f1} />
+          <MLBStandingsLeaderboard divisions={standings.mlbDivisions} />
+          <PGALeaderboard entries={standings.pga} />
         </>
       ) : null}
 
