@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
+import { RefreshCw, Star, Sunrise, Sun, Moon } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
@@ -188,19 +188,6 @@ export function SportsGuide({
             Ball<span className="text-primary">_</span>Knowledge
           </h1>
         </div>
-
-        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4 ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
-          <BriefingStat icon={Trophy} label="Today" value={String(games.length)} />
-          <BriefingStat
-            icon={Flame}
-            label="Live"
-            value={String(liveCount)}
-            highlight={liveCount > 0}
-            onClick={liveCount > 0 ? () => setFilter("live") : undefined}
-          />
-          <BriefingStat icon={Clock} label="Next" value={nextUp || "—"} />
-          <BriefingStat icon={CalendarDays} label="Final" value={String(finalCount)} />
-        </div>
       </header>
 
       <nav
@@ -329,50 +316,6 @@ function CategoryBadge({ status }: { status: CategoryStatus }) {
     )
   }
   return null
-}
-
-function BriefingStat({
-  icon: Icon,
-  label,
-  value,
-  highlight,
-  onClick,
-}: {
-  icon: typeof Trophy
-  label: string
-  value: string
-  highlight?: boolean
-  onClick?: () => void
-}) {
-  const inner = (
-    <>
-      <span className="flex items-center gap-1 font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50">
-        <Icon className={`h-2.5 w-2.5 ${highlight ? "live-dot text-destructive" : "text-primary"}`} aria-hidden="true" />
-        {label}
-      </span>
-      <span
-        className={`mt-1 font-mono text-3xl font-black tabular-nums leading-none ${
-          highlight ? "text-destructive" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-    </>
-  )
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex flex-col items-start bg-destructive/10 p-3.5 text-left transition-colors hover:bg-destructive/20 sm:p-4"
-      >
-        {inner}
-      </button>
-    )
-  }
-
-  return <div className="flex flex-col bg-card p-3.5 sm:p-4">{inner}</div>
 }
 
 function FilterChip({
