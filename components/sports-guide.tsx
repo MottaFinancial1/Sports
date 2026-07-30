@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
+import { RefreshCw, Star, Sunrise, Sun, Moon } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
@@ -18,6 +18,7 @@ import {
   type SportsData,
   type StatcastHighlight,
 } from "@/lib/espn"
+import { getTeamViews, gameViewScore, type TeamViewMap } from "@/lib/team-views"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
@@ -72,6 +73,12 @@ export function SportsGuide({
   const [updated, setUpdated] = useState<string>("")
   const [greeting, setGreeting] = useState<{ text: string; Icon: typeof Sunrise } | null>(null)
   const [nextUp, setNextUp] = useState<string>("")
+  const [teamViews, setTeamViews] = useState<TeamViewMap>({})
+
+  // Load view counts from localStorage once on mount.
+  useEffect(() => {
+    setTeamViews(getTeamViews())
+  }, [])
 
   useEffect(() => {
     const now = new Date()
@@ -105,9 +112,40 @@ export function SportsGuide({
 
   const favoriteGames = useMemo(
     () =>
-      games.filter(isFavoriteGame).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [games],
+      games.filter(isFavoriteGame).sort((a, b) => {
+        const viewDiff =
+          gameViewScore(b.competitors.map((c) => c.name), teamViews) -
+          gameViewScore(a.competitors.map((c) => c.name), teamViews)
+        if (viewDiff !== 0) return viewDiff
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
+      }),
+    [games, teamViews],
   )
+
+  // Show standings before news/statcast when a live tournament or playoff race is happening:
+  // — a PGA or F1 game is actively in-progress, OR
+  // — it's MLB playoff season (September or October).
+  const standingsFirst = useMemo(() => {
+    const now = new Date()
+    const month = now.getMonth() + 1 // 1-indexed
+    const mlbPlayoffs = month >= 9 && month <= 10
+    const liveTournament = games.some(
+      (g) => g.state === "in" && (g.leagueId === "pga" || g.leagueId === "f1"),
+    )
+    return liveTournament || mlbPlayoffs
+  }, [games])
+
+  // Top non-favorite teams the user watches most (at least 1 view).
+  const mostWatchedGames = useMemo(() => {
+    if (Object.keys(teamViews).length === 0) return []
+    return games
+      .filter((g) => !isFavoriteGame(g))
+      .map((g) => ({ game: g, score: gameViewScore(g.competitors.map((c) => c.name), teamViews) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map(({ game }) => game)
+  }, [games, teamViews])
 
   const filtered = useMemo(() => {
     if (filter === "all") return games
@@ -133,7 +171,14 @@ export function SportsGuide({
       byCategory.set(g.category, catArr)
     }
     for (const arr of byLeague.values()) {
-      arr.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      arr.sort((a, b) => {
+        // Most-viewed teams bubble up; ties broken by start time.
+        const viewDiff =
+          gameViewScore(b.competitors.map((c) => c.name), teamViews) -
+          gameViewScore(a.competitors.map((c) => c.name), teamViews)
+        if (viewDiff !== 0) return viewDiff
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
+      })
     }
 
     const ordered = orderCategories(
@@ -152,60 +197,47 @@ export function SportsGuide({
         }
       })
       .filter((c) => c.leagues.length > 0)
-  }, [filtered])
+  }, [filtered, teamViews])
 
   const GreetingIcon = greeting?.Icon ?? Sunrise
 
   return (
     <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
-      {/* Terminal-style status bar */}
-      <div className="-mx-4 flex items-center justify-between gap-3 border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground sm:-mx-6 sm:px-6">
+      {/* Status bar */}
+      <div className="-mx-4 grid grid-cols-[1fr_auto_1fr] items-center border-b border-border px-4 py-2.5 sm:-mx-6 sm:px-6">
+        {/* Left — greeting icon + short label */}
         <span className="flex items-center gap-1.5">
-          <GreetingIcon className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          {greeting?.text ?? "Hello"}
+          <GreetingIcon className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden="true" />
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-muted-foreground/60">
+            {greeting?.text ?? "—"}
+          </span>
         </span>
-        <span className="hidden items-center gap-1.5 sm:flex">
-          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-          {today || "Loading…"}
+
+        {/* Center — date */}
+        <span className="font-mono text-xs font-bold uppercase tracking-widest text-foreground/80">
+          {today || "—"}
         </span>
-        <span className="flex items-center gap-1.5 text-primary">
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          Synced {updated || "…"}
+
+        {/* Right — sync time only */}
+        <span className="flex items-center justify-end gap-1.5 text-primary/70">
+          <RefreshCw className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]">
+            {updated || "—"}
+          </span>
         </span>
       </div>
 
-      <header className="flex flex-col gap-5 pt-7 sm:pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-destructive pl-4">
-          <div>
-            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-destructive">
-              Personalized sports intelligence
-            </p>
-            <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-              Ball<span className="text-destructive">_</span>Knowledge
-            </h1>
-          </div>
-          <p className="max-w-xs text-pretty text-sm leading-relaxed text-muted-foreground">
-            Live scores, standout performances, and the next events worth your attention.
-          </p>
-        </div>
-
-        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4 ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
-          <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
-          <BriefingStat
-            icon={Flame}
-            label="Live now"
-            value={String(liveCount)}
-            highlight={liveCount > 0}
-            onClick={liveCount > 0 ? () => setFilter("live") : undefined}
-          />
-          <BriefingStat icon={Clock} label="Next start" value={nextUp || "…"} />
-          <BriefingStat icon={CalendarDays} label="Finished" value={String(finalCount)} />
+      <header className="flex flex-col gap-5 pt-8 sm:pt-12">
+        <div className="border-l-2 border-primary pl-4">
+          <h1 className="font-mono text-5xl font-black uppercase leading-none tracking-tighter text-foreground sm:text-7xl">
+            Ball<span className="text-primary">_</span>Knowledge
+          </h1>
         </div>
       </header>
 
       <nav
         aria-label="Filter by league"
-        className="sticky top-0 z-10 -mx-4 mb-6 mt-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
+        className="sticky top-0 z-10 -mx-4 mb-6 mt-4 flex gap-1.5 overflow-x-auto border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur sm:-mx-6 sm:px-6"
       >
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
           All ({games.length})
@@ -233,13 +265,26 @@ export function SportsGuide({
         />
       ) : null}
 
-      {filter === "all" ? <AskSlate /> : null}
+      {filter === "all" && mostWatchedGames.length > 0 ? (
+        <section className="mb-10">
+          <h2 className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+            <span className="inline-block h-3 w-1 bg-primary" aria-hidden="true" />
+            Most Watched
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+          </h2>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {mostWatchedGames.map((g) => (
+              <GameCard key={`mw-${g.id}`} game={g} />
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {filter === "all" && favoriteGames.length > 0 ? (
         <section className="mb-10">
-          <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
-            <Star className="h-3.5 w-3.5 fill-primary" aria-hidden="true" />
-            Favorite Teams
+          <h2 className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
+            <Star className="h-3 w-3 fill-primary" aria-hidden="true" />
+            Favorites
             <span className="h-px flex-1 bg-border" aria-hidden="true" />
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -250,7 +295,10 @@ export function SportsGuide({
         </section>
       ) : null}
 
-      {filter === "all" ? (
+      {filter === "all" ? <AskSlate /> : null}
+
+      {/* Standings-first when a live tournament or MLB playoffs are active */}
+      {filter === "all" && standingsFirst ? (
         <>
           <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
           <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
@@ -262,18 +310,25 @@ export function SportsGuide({
 
       {filter === "all" ? <SportsNews articles={news} /> : null}
 
+      {/* Standings after news/statcast in the default case */}
+      {filter === "all" && !standingsFirst ? (
+        <>
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
+          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
+        </>
+      ) : null}
+
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
-          <p className="text-lg font-semibold text-foreground">No games match this filter</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Try another league, or check back — the schedule refreshes automatically.
-          </p>
+          <p className="font-mono text-sm font-bold uppercase tracking-widest text-foreground">No games</p>
+          <p className="mt-1 font-mono text-xs text-muted-foreground/60">Refreshes automatically.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-10">
           {grouped.map(({ category, status, leagues }) => (
             <section key={category} className={status === "done" || status === "scheduled" ? "opacity-75" : ""}>
-              <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              <h2 className="mb-4 flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50">
                 <span
                   className={`inline-block h-3 w-1 ${status === "live" ? "bg-destructive" : "bg-primary"}`}
                   aria-hidden="true"
@@ -333,50 +388,6 @@ function CategoryBadge({ status }: { status: CategoryStatus }) {
   return null
 }
 
-function BriefingStat({
-  icon: Icon,
-  label,
-  value,
-  highlight,
-  onClick,
-}: {
-  icon: typeof Trophy
-  label: string
-  value: string
-  highlight?: boolean
-  onClick?: () => void
-}) {
-  const inner = (
-    <>
-      <span className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-        <Icon className={`h-3 w-3 ${highlight ? "live-dot text-destructive" : "text-primary"}`} aria-hidden="true" />
-        {label}
-      </span>
-      <span
-        className={`mt-1.5 font-mono text-2xl font-extrabold tabular-nums leading-none ${
-          highlight ? "text-destructive" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-    </>
-  )
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex flex-col items-start bg-destructive/10 p-3.5 text-left transition-colors hover:bg-destructive/20 sm:p-4"
-      >
-        {inner}
-      </button>
-    )
-  }
-
-  return <div className="flex flex-col bg-card p-3.5 sm:p-4">{inner}</div>
-}
-
 function FilterChip({
   active,
   highlight,
@@ -392,7 +403,7 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-sm border px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] transition-colors ${
         active
           ? "border-primary bg-primary text-primary-foreground"
           : highlight

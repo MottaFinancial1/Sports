@@ -97,13 +97,13 @@ export function AskSlate() {
         ) : (
           <div className="flex flex-col gap-3">
             <div>
-              <p className="text-sm font-semibold text-foreground">Your schedule desk</p>
+              <p className="font-mono text-xs font-bold uppercase tracking-widest text-foreground">Intelligence desk</p>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Ask about home games, future opponents, start times, and broadcasts.
+                Scores, schedules, stats, injuries, trades — sourced from ESPN, The Athletic, X, and more.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {["Are the Red Sox home next weekend?", "Who do the Bills play in Week 9?", "When is the next F1 race?"].map(
+              {["Red Sox injury report?", "F1 standings after last race?", "Any big trades today?", "Bills next game + broadcast?"].map(
                 (question) => (
                   <button
                     key={question}
@@ -127,7 +127,7 @@ export function AskSlate() {
           <input
             ref={inputRef}
             type="text"
-            placeholder="Are the Red Sox at home next weekend?"
+            placeholder="Any big trades today? Who leads F1? Red Sox next game?"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isLoading}
