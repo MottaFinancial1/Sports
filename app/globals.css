@@ -48,45 +48,62 @@
 }
 
 /*
-  Ball Knowledge — data-terminal theme.
-  A single canonical dark theme: near-black surfaces, electric green accent,
-  hairline borders, and a red-orange signal color for LIVE states.
-  Palette (4 colors): black neutrals, off-white text, electric green, signal red.
+  Ball Knowledge — stadium-lights theme.
+  Deep obsidian black surfaces, electric amber/gold primary (stadium floodlights),
+  signal red for LIVE states, and cool white text.
+  Palette (4 colors): deep black-blue neutrals, off-white text, electric amber, signal red.
 */
 :root {
   color-scheme: dark;
-  --background: oklch(0.22 0.01 155);
-  --foreground: oklch(0.96 0.005 155);
-  --card: oklch(0.28 0.012 155);
-  --card-foreground: oklch(0.96 0.005 155);
-  --popover: oklch(0.28 0.012 155);
-  --popover-foreground: oklch(0.96 0.005 155);
-  --primary: oklch(0.85 0.23 148);
-  --primary-foreground: oklch(0.22 0.01 155);
-  --secondary: oklch(0.35 0.015 155);
-  --secondary-foreground: oklch(0.96 0.005 155);
-  --muted: oklch(0.35 0.015 155);
-  --muted-foreground: oklch(0.75 0.02 155);
-  --accent: oklch(0.35 0.015 155);
-  --accent-foreground: oklch(0.96 0.005 155);
-  --destructive: oklch(0.68 0.21 27);
-  --border: oklch(1 0 0 / 18%);
-  --input: oklch(1 0 0 / 22%);
-  --ring: oklch(0.85 0.23 148);
-  --chart-1: oklch(0.85 0.23 148);
-  --chart-2: oklch(0.68 0.21 27);
-  --chart-3: oklch(0.68 0.015 155);
-  --chart-4: oklch(0.44 0.01 155);
-  --chart-5: oklch(0.25 0.012 155);
-  --radius: 0.375rem;
-  --sidebar: oklch(0.28 0.012 155);
-  --sidebar-foreground: oklch(0.96 0.005 155);
-  --sidebar-primary: oklch(0.85 0.23 148);
-  --sidebar-primary-foreground: oklch(0.22 0.01 155);
-  --sidebar-accent: oklch(0.35 0.015 155);
-  --sidebar-accent-foreground: oklch(0.96 0.005 155);
-  --sidebar-border: oklch(1 0 0 / 18%);
-  --sidebar-ring: oklch(0.85 0.23 148);
+
+  /* Obsidian black-blue base — deeper and cooler than before */
+  --background: oklch(0.10 0.015 255);
+  --foreground: oklch(0.96 0.005 80);
+
+  /* Elevated surface — slightly lighter, still near-black */
+  --card: oklch(0.15 0.018 255);
+  --card-foreground: oklch(0.96 0.005 80);
+  --popover: oklch(0.15 0.018 255);
+  --popover-foreground: oklch(0.96 0.005 80);
+
+  /* Electric amber — stadium floodlight gold */
+  --primary: oklch(0.82 0.19 72);
+  --primary-foreground: oklch(0.10 0.015 255);
+
+  /* Subtle mid-surface */
+  --secondary: oklch(0.20 0.022 255);
+  --secondary-foreground: oklch(0.96 0.005 80);
+  --muted: oklch(0.20 0.022 255);
+  --muted-foreground: oklch(0.65 0.015 255);
+  --accent: oklch(0.20 0.022 255);
+  --accent-foreground: oklch(0.96 0.005 80);
+
+  /* Signal red — live / alert state */
+  --destructive: oklch(0.65 0.22 25);
+
+  /* Hairline borders — subtle cool blue-white */
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.82 0.19 72);
+
+  /* Charts */
+  --chart-1: oklch(0.82 0.19 72);
+  --chart-2: oklch(0.65 0.22 25);
+  --chart-3: oklch(0.55 0.015 255);
+  --chart-4: oklch(0.32 0.018 255);
+  --chart-5: oklch(0.18 0.015 255);
+
+  --radius: 0.25rem;
+
+  /* Sidebar */
+  --sidebar: oklch(0.13 0.018 255);
+  --sidebar-foreground: oklch(0.96 0.005 80);
+  --sidebar-primary: oklch(0.82 0.19 72);
+  --sidebar-primary-foreground: oklch(0.10 0.015 255);
+  --sidebar-accent: oklch(0.20 0.022 255);
+  --sidebar-accent-foreground: oklch(0.96 0.005 80);
+  --sidebar-border: oklch(1 0 0 / 12%);
+  --sidebar-ring: oklch(0.82 0.19 72);
 }
 
 @layer base {

@@ -175,13 +175,13 @@ export function SportsGuide({
       </div>
 
       <header className="flex flex-col gap-5 pt-7 sm:pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-destructive pl-4">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-primary pl-4">
           <div>
-            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-destructive">
+            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-primary">
               Personalized sports intelligence
             </p>
             <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-              Ball<span className="text-destructive">_</span>Knowledge
+              Ball<span className="text-primary">_</span>Knowledge
             </h1>
           </div>
           <p className="max-w-xs text-pretty text-sm leading-relaxed text-muted-foreground">
