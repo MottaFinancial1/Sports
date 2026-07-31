@@ -1,13 +1,11 @@
 import { generateText, stepCountIs, tool } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
 
-const model = createOpenAI({
-  apiKey: process.env.AI_GATEWAY_API_KEY,
-  baseURL: 'https://ai-gateway.vercel.sh/v1',
-}).languageModel('openai/gpt-4o-mini')
+// Routed through the Vercel AI Gateway (default provider for the AI SDK).
+// Auth comes from the AI_GATEWAY_API_KEY env var automatically.
+const MODEL = 'openai/gpt-5.4-mini'
 
 // Reputable sports sources queried by the web search tool.
 const SPORTS_SOURCES = [
@@ -156,7 +154,7 @@ export async function POST(req: Request) {
     }
 
     const response = await generateText({
-      model,
+      model: MODEL,
       tools,
       toolChoice: 'auto',
       system: `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
