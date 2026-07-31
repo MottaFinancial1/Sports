@@ -1,10 +1,12 @@
 import { generateText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
+import { getGameVibe } from '@/lib/game-vibe'
 
 // AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
-// Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is needed.
-const model = 'openai/gpt-4o-mini'
+// Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
+// needed; locally the AI_GATEWAY_API_KEY env var is used when present.
+const MODEL = 'openai/gpt-5.4-mini'
 
 // Reputable sports sources queried by the web search tool.
 const SPORTS_SOURCES = [
@@ -38,10 +40,13 @@ export async function POST(req: Request) {
     const now = new Date()
     const scheduleContext = games
       .slice(0, 50)
-      .map(
-        (g) =>
-          `${g.leagueShort} ${g.date ? new Date(g.date).toLocaleDateString() : 'Today'}: ${g.shortName}, ${g.state === 'in' ? 'LIVE' : g.state === 'post' ? 'FINAL' : 'Pre'}, Venue: ${g.venue ?? 'TBD'}, Broadcasts: ${g.broadcasts.join(', ') || 'TBD'}`,
-      )
+      .map((g) => {
+        const vibe = getGameVibe(g)
+        const scoreline = g.competitors
+          .map((c) => `${c.shortName}${c.score !== undefined ? ` ${c.score}` : ''}`)
+          .join(g.competitors.length === 2 ? ' vs ' : ', ')
+        return `${g.leagueShort} ${g.date ? new Date(g.date).toLocaleDateString() : 'Today'}: ${g.shortName}, ${g.state === 'in' ? 'LIVE' : g.state === 'post' ? 'FINAL' : 'Pre'}${g.statusDetail ? ` (${g.statusDetail})` : ''}, Score: ${scoreline}${vibe ? `, Vibe: ${vibe.label}` : ''}, Venue: ${g.venue ?? 'TBD'}, Broadcasts: ${g.broadcasts.join(', ') || 'TBD'}`
+      })
       .join('\n')
 
     const tools = {
@@ -150,7 +155,7 @@ export async function POST(req: Request) {
     }
 
     const response = await generateText({
-      model,
+      model: MODEL,
       tools,
       toolChoice: 'auto',
       system: `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
@@ -166,6 +171,11 @@ Rules:
 - Cite your source (site name) when using webSearch results.
 - Max 2–3 sentences per answer. Numbers and facts over prose.
 - Today's date: ${now.toLocaleDateString()}.
+
+When summarizing a live or completed game (or previewing an upcoming one), lead with the ONE descriptor that best captures its character, then back it with the decisive number(s). Draw from this vocabulary and apply it honestly — only use a label the data supports:
+- Baseball: "pitcher's duel" (both lineups shut down), "slugfest" (runs pouring in), "bullpen game" (no traditional starter going deep), "enticing pitching matchup" / "ace duel" (two aces on the mound for a preview), "EXTRA INNINGS" (tied after 9), "bats alive", "nail-biter".
+- All sports: "shootout" (points/goals flying), "nail-biter" (razor-thin margin), "instant classic" (dramatic, went to OT/extras and stayed close), "statement game" (a favorite dominating), "defensive masterclass" (elite low-scoring effort), "must-win" (elimination or standings stakes), "revenge game" (rematch after a prior loss), "rivalry match" (historic rivalry), "upset alert" (an underdog leading/beating a favorite).
+- The "Vibe" tag in the schedule context below is the deterministic read of each game — treat it as a strong hint, and enrich it with the stakes (records, standings, elimination, rivalry, revenge angle) when you know them.
 
 Current live schedule context:
 ${scheduleContext}`,

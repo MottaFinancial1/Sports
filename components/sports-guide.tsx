@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import { RefreshCw, Star, Sunrise, Sun, Moon } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
+import { AuthStatus } from "@/components/auth-status"
 import { GameCard } from "@/components/game-card"
 import { SportsNews } from "@/components/sports-news"
 import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
@@ -218,12 +219,15 @@ export function SportsGuide({
           {today || "—"}
         </span>
 
-        {/* Right — sync time only */}
-        <span className="flex items-center justify-end gap-1.5 text-primary/70">
-          <RefreshCw className="h-3 w-3 shrink-0" aria-hidden="true" />
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]">
-            {updated || "—"}
+        {/* Right — sync time + auth control */}
+        <span className="flex items-center justify-end gap-3">
+          <span className="flex items-center gap-1.5 text-primary/70">
+            <RefreshCw className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em]">
+              {updated || "—"}
+            </span>
           </span>
+          <AuthStatus />
         </span>
       </div>
 
