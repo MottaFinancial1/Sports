@@ -1,12 +1,10 @@
 import { generateText, stepCountIs, tool } from 'ai'
-import { createOpenAI } from '@ai-sdk/openai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 
-const model = createOpenAI({
-  apiKey: process.env.AI_GATEWAY_API_KEY,
-  baseURL: 'https://ai-gateway.vercel.sh/v1',
-}).languageModel('openai/gpt-4o-mini')
+// AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
+// Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is needed.
+const model = 'openai/gpt-4o-mini'
 
 // Reputable sports sources queried by the web search tool.
 const SPORTS_SOURCES = [
