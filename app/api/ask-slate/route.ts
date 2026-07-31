@@ -3,8 +3,9 @@ import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
 
-// Routed through the Vercel AI Gateway (default provider for the AI SDK).
-// Auth comes from the AI_GATEWAY_API_KEY env var automatically.
+// AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
+// Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
+// needed; locally the AI_GATEWAY_API_KEY env var is used when present.
 const MODEL = 'openai/gpt-5.4-mini'
 
 // Reputable sports sources queried by the web search tool.
