@@ -297,6 +297,10 @@ export function SportsGuide({
 
       {filter === "all" ? <AskSlate /> : null}
 
+      {filter === "all" ? <SportsNews articles={news} /> : null}
+
+      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
+
       {/* Standings-first when a live tournament or MLB playoffs are active */}
       {filter === "all" && standingsFirst ? (
         <>
@@ -306,11 +310,7 @@ export function SportsGuide({
         </>
       ) : null}
 
-      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
-
-      {filter === "all" ? <SportsNews articles={news} /> : null}
-
-      {/* Standings after news/statcast in the default case */}
+      {/* Standings after statcast in the default case */}
       {filter === "all" && !standingsFirst ? (
         <>
           <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />

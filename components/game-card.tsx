@@ -4,6 +4,14 @@ import { useEffect, useState } from "react"
 import { ExternalLink, Radio, Tv } from "lucide-react"
 import type { Game, ProbablePitcher } from "@/lib/espn"
 import { recordTeamView } from "@/lib/team-views"
+import { getGameVibe, type VibeTone } from "@/lib/game-vibe"
+
+const VIBE_TONE_CLASS: Record<VibeTone, string> = {
+  hot: "border-destructive/40 bg-destructive/10 text-destructive",
+  tight: "border-primary/40 bg-primary/15 text-primary",
+  cool: "border-border bg-secondary text-secondary-foreground",
+  neutral: "border-border bg-muted text-muted-foreground",
+}
 
 function GameTime({ iso, state }: { iso: string; state: Game["state"] }) {
   const [label, setLabel] = useState<string>("")
@@ -112,6 +120,7 @@ function TeamRow({
 export function GameCard({ game }: { game: Game }) {
   const showScore = game.state !== "pre"
   const isEvent = game.competitors.length !== 2
+  const vibe = getGameVibe(game)
 
   const card = (
     <article
@@ -127,6 +136,13 @@ export function GameCard({ game }: { game: Game }) {
           {game.week !== undefined ? (
             <span className="rounded-sm bg-primary/15 px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary">
               Wk {game.week}
+            </span>
+          ) : null}
+          {vibe ? (
+            <span
+              className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${VIBE_TONE_CLASS[vibe.tone]}`}
+            >
+              {vibe.label}
             </span>
           ) : null}
         </div>
