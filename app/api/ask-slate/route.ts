@@ -153,34 +153,40 @@ export async function POST(req: Request) {
             .describe('How recent results must be. Defaults to "week". Use "day" for breaking news, "any" for historical/stats.'),
         }),
         execute: async ({ query, scope, sites, recency }) => {
-          // Resolve which domains to target based on scope (sites overrides scope).
+          // Brave's query string has a hard limit (~2048 chars). site: filters
+          // blow past it quickly, so we keep the OR-list very short (≤6 domains)
+          // and for "all" / "open" scopes we simply run an unrestricted search
+          // (Brave already favors high-authority sports domains without filters).
           let targetSites: string[] | null
           if (sites?.length) {
-            targetSites = sites
+            // Caller-supplied list: honour it but cap at 5 to stay under the limit.
+            targetSites = sites.slice(0, 5)
           } else {
             switch (scope) {
               case 'sports':
-                targetSites = SPORTS_SOURCES
+                // Pick the 6 highest-signal sports domains only.
+                targetSites = ['espn.com', 'theathletic.com', 'cbssports.com', 'bleacherreport.com', 'sportingnews.com', 'si.com']
                 break
               case 'news':
-                targetSites = NEWS_SOURCES
+                targetSites = ['apnews.com', 'reuters.com', 'nytimes.com', 'washingtonpost.com', 'theguardian.com', 'usatoday.com']
                 break
               case 'social':
-                targetSites = SOCIAL_SOURCES
+                // X (twitter.com) and Reddit — short list, no length issue.
+                targetSites = ['x.com', 'twitter.com', 'reddit.com']
                 break
               case 'open':
-                targetSites = null // unrestricted whole-web search
-                break
               case 'all':
               default:
-                targetSites = ALL_SOURCES
+                // No site filter — Brave returns the best results across the web
+                // which naturally surfaces ESPN, The Athletic, wire services, X, etc.
+                targetSites = null
                 break
             }
           }
 
-          // Brave caps query length, so cap the OR-filter to a reasonable set.
-          const siteFilter = targetSites
-            ? ` (${targetSites.slice(0, 20).map((s) => `site:${s}`).join(' OR ')})`
+          // Build a concise site filter (≤6 domains keeps the URL well under 500 chars).
+          const siteFilter = targetSites && targetSites.length > 0
+            ? ` (${targetSites.map((s) => `site:${s}`).join(' OR ')})`
             : ''
           const searchQuery = `${query}${siteFilter}`
 
@@ -192,7 +198,7 @@ export async function POST(req: Request) {
                 ? ''
                 : '&freshness=pw'
 
-          const scopeLabel = targetSites ? targetSites.slice(0, 6).join(', ') : 'the open web'
+          const scopeLabel = targetSites ? targetSites.join(', ') : 'the open web'
 
           try {
             const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
