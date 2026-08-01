@@ -8,25 +8,59 @@ import { getGameVibe } from '@/lib/game-vibe'
 // needed; locally the AI_GATEWAY_API_KEY env var is used when present.
 const MODEL = 'openai/gpt-5.4-mini'
 
-// Reputable sports sources queried by the web search tool.
+// Live sports platforms — league sites, broadcasters, and dedicated outlets.
 const SPORTS_SOURCES = [
   'espn.com',
   'theathletic.com',
   'mlb.com',
   'nfl.com',
   'nba.com',
+  'nhl.com',
   'f1.com',
+  'formula1.com',
   'pgatour.com',
+  'atptour.com',
+  'wtatennis.com',
+  'premierleague.com',
+  'uefa.com',
+  'mlssoccer.com',
   'si.com',
   'cbssports.com',
+  'foxsports.com',
+  'yahoo.com',
   'bleacherreport.com',
+  'thescore.com',
+  'sportingnews.com',
+  'sportsnet.ca',
+  'tsn.ca',
+  'skysports.com',
+  'bbc.com',
+  'goal.com',
+  'espncricinfo.com',
   'pro-football-reference.com',
   'baseball-reference.com',
   'basketball-reference.com',
   'fivethirtyeight.com',
   'rotowire.com',
-  'x.com',
+  'spotrac.com',
 ]
+
+// General news wires and outlets that break sports stories (trades, legal, business).
+const NEWS_SOURCES = [
+  'apnews.com',
+  'reuters.com',
+  'nytimes.com',
+  'washingtonpost.com',
+  'theguardian.com',
+  'bloomberg.com',
+  'usatoday.com',
+]
+
+// Social / community platforms for real-time buzz, insider reports, and reactions.
+const SOCIAL_SOURCES = ['x.com', 'twitter.com', 'reddit.com', 'youtube.com']
+
+// The full universe the model may search across.
+const ALL_SOURCES = [...SPORTS_SOURCES, ...NEWS_SOURCES, ...SOCIAL_SOURCES]
 
 export async function POST(req: Request) {
   try {
@@ -98,23 +132,70 @@ export async function POST(req: Request) {
 
       webSearch: tool({
         description:
-          'Search reputable sports websites and X (Twitter) for real-time news, stats, injury reports, trades, standings, and analysis. Use for anything beyond today\'s schedule — trades, injuries, rankings, historical stats, player news, social buzz.',
+          'Search live sports platforms, major news outlets, and social platforms (X/Twitter, Reddit) for real-time news, stats, injury reports, trades, rumors, standings, and analysis. Use for anything beyond today\'s schedule. Pick a scope: "all" (default, sports + news + social), "sports", "news", "social" (X/Reddit buzz & insider reports), or "open" (unrestricted whole-web search). Use "social" or "open" for breaking rumors and insider chatter.',
         inputSchema: z.object({
           query: z.string().describe('Specific sports search query'),
+          scope: z
+            .enum(['all', 'sports', 'news', 'social', 'open'])
+            .optional()
+            .describe(
+              'Where to search: "all" = sports+news+social sites, "sports" = league/sports outlets, "news" = wire services & major papers, "social" = X/Twitter/Reddit for buzz & insider reports, "open" = unrestricted web. Defaults to "all".',
+            ),
           sites: z
             .array(z.string())
             .optional()
             .describe(
-              `Optionally restrict to specific sites from: ${SPORTS_SOURCES.join(', ')}`,
+              `Optionally restrict to specific domains (overrides scope). Available: ${ALL_SOURCES.join(', ')}`,
             ),
+          recency: z
+            .enum(['day', 'week', 'month', 'any'])
+            .optional()
+            .describe('How recent results must be. Defaults to "week". Use "day" for breaking news, "any" for historical/stats.'),
         }),
-        execute: async ({ query, sites }) => {
-          const targetSites = sites?.length ? sites : SPORTS_SOURCES.slice(0, 8)
-          const siteFilter = targetSites.map((s) => `site:${s}`).join(' OR ')
-          const searchQuery = `${query} (${siteFilter})`
+        execute: async ({ query, scope, sites, recency }) => {
+          // Resolve which domains to target based on scope (sites overrides scope).
+          let targetSites: string[] | null
+          if (sites?.length) {
+            targetSites = sites
+          } else {
+            switch (scope) {
+              case 'sports':
+                targetSites = SPORTS_SOURCES
+                break
+              case 'news':
+                targetSites = NEWS_SOURCES
+                break
+              case 'social':
+                targetSites = SOCIAL_SOURCES
+                break
+              case 'open':
+                targetSites = null // unrestricted whole-web search
+                break
+              case 'all':
+              default:
+                targetSites = ALL_SOURCES
+                break
+            }
+          }
+
+          // Brave caps query length, so cap the OR-filter to a reasonable set.
+          const siteFilter = targetSites
+            ? ` (${targetSites.slice(0, 20).map((s) => `site:${s}`).join(' OR ')})`
+            : ''
+          const searchQuery = `${query}${siteFilter}`
+
+          const freshnessMap: Record<string, string> = { day: 'pd', week: 'pw', month: 'pm' }
+          const freshnessParam =
+            recency && recency !== 'any' && freshnessMap[recency]
+              ? `&freshness=${freshnessMap[recency]}`
+              : recency === 'any'
+                ? ''
+                : '&freshness=pw'
+
+          const scopeLabel = targetSites ? targetSites.slice(0, 6).join(', ') : 'the open web'
 
           try {
-            const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=5&freshness=pd`
+            const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
             const res = await fetch(searchUrl, {
               headers: {
                 'Accept': 'application/json',
@@ -126,25 +207,25 @@ export async function POST(req: Request) {
 
             if (!res.ok) {
               // Graceful fallback: tell the model what sources to reference.
-              return `Web search unavailable. For "${query}", I'd recommend checking: ${targetSites.join(', ')} directly. Today's date: ${now.toLocaleDateString()}.`
+              return `Web search unavailable. For "${query}", I'd recommend checking: ${scopeLabel} directly. Today's date: ${now.toLocaleDateString()}.`
             }
 
             const data = await res.json() as {
               web?: {
-                results?: { title?: string; description?: string; url?: string; age?: string }[]
+                results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
               }
             }
 
             const results = data.web?.results ?? []
             if (results.length === 0) {
-              return `No results found for "${query}" on ${targetSites.join(', ')}.`
+              return `No results found for "${query}" across ${scopeLabel}.`
             }
 
             return results
-              .slice(0, 5)
+              .slice(0, 6)
               .map(
                 (r) =>
-                  `[${r.title ?? 'Article'}] ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
+                  `[${r.profile?.name ?? r.title ?? 'Source'}] ${r.title ?? ''}: ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
               )
               .join('\n\n')
           } catch {
@@ -162,13 +243,17 @@ export async function POST(req: Request) {
 
 You have access to:
 1. Live game schedules across MLB, NFL, NCAAF, EPL, UCL, La Liga, MLS, F1, PGA, ATP, WTA, NBA, NCAAM (searchSchedule, findNextGame tools)
-2. Real-time web search across ESPN, The Athletic, MLB.com, NFL.com, NBA.com, F1.com, PGA Tour, SI, CBS Sports, Bleacher Report, Pro/Baseball/Basketball Reference, FiveThirtyEight, RotoWire, and X/Twitter (webSearch tool)
+2. Real-time web search (webSearch tool) spanning:
+   - Live sports platforms: ESPN, The Athletic, league sites (MLB/NFL/NBA/NHL/F1/PGA/ATP/WTA/Premier League/UEFA/MLS), broadcasters (Fox Sports, Sky Sports, TSN, Sportsnet, BBC, Yahoo, The Score), and reference/analytics sites (Pro/Baseball/Basketball Reference, FiveThirtyEight, RotoWire, Spotrac)
+   - Major news outlets: AP, Reuters, NYT, Washington Post, The Guardian, Bloomberg, USA Today
+   - Social platforms: X/Twitter and Reddit for real-time buzz, insider reports, and fan reaction
 
 Rules:
 - Be direct, fast, and specific. No fluff.
 - For schedule/score questions → use searchSchedule or findNextGame.
-- For stats, trades, injuries, news, standings, analysis, or anything on X → use webSearch.
-- Cite your source (site name) when using webSearch results.
+- For stats, trades, injuries, news, standings, analysis, or social buzz → use webSearch. Choose the scope deliberately: "sports" for official stats/news, "news" for business/legal/breaking wire stories, "social" (X/Twitter, Reddit) for insider reports, rumors, and reactions, "all" to cast the widest net, and "open" only when the topic is niche and none of the curated sources fit.
+- For breaking news and live rumors, set recency to "day" and prefer the "social" or "all" scope. For historical stats, set recency to "any".
+- Cite your source (site name, or the handle/platform for X/Reddit) when using webSearch results.
 - Max 2–3 sentences per answer. Numbers and facts over prose.
 - Today's date: ${now.toLocaleDateString()}.
 
