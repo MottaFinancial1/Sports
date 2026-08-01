@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, tool } from 'ai'
+import { streamText, stepCountIs, tool, createUIMessageStreamResponse, convertToModelMessages } from 'ai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
@@ -6,7 +6,9 @@ import { getGameVibe } from '@/lib/game-vibe'
 // AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
 // Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
 // needed; locally the AI_GATEWAY_API_KEY env var is used when present.
-const MODEL = 'openai/gpt-5.4-mini'
+// gpt-4.1 is the best balance of speed, accuracy, and cost on the AI Gateway.
+// It has a 1M token context window and strong sports/real-world knowledge.
+const MODEL = 'openai/gpt-4.1'
 
 // Live sports platforms — league sites, broadcasters, and dedicated outlets.
 const SPORTS_SOURCES = [
@@ -67,13 +69,38 @@ export const dynamic = 'force-dynamic'
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json() as { question?: string; messages?: { role: string; content: string }[] }
-    // Support both the legacy { question } shape and the useChat { messages } shape.
-    const question =
-      body.question ??
-      [...(body.messages ?? [])].reverse().find((m) => m.role === 'user')?.content ?? ''
+    // AI SDK v7 useChat sends { messages: UIMessage[] } where each message has
+    // a `parts` array, not a plain `content` string. We also still support the
+    // legacy { question: string } shape for direct API calls.
+    const body = await req.json() as {
+      question?: string
+      messages?: Array<{
+        role: string
+        content?: string
+        parts?: Array<{ type: string; text?: string }>
+      }>
+    }
 
-    if (!question || typeof question !== 'string') {
+    // Extract the latest user question from whatever format was sent.
+    let question = body.question ?? ''
+    if (!question && body.messages?.length) {
+      const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')
+      if (lastUser) {
+        // v7 UIMessage: extract text from parts
+        if (lastUser.parts?.length) {
+          question = lastUser.parts
+            .filter((p) => p.type === 'text')
+            .map((p) => p.text ?? '')
+            .join('')
+        }
+        // legacy: plain content string
+        if (!question && typeof lastUser.content === 'string') {
+          question = lastUser.content
+        }
+      }
+    }
+
+    if (!question) {
       return Response.json({ error: 'Question required' }, { status: 400 })
     }
 
@@ -282,7 +309,11 @@ ${scheduleContext}`,
       prompt: question,
     })
 
-    return result.toUIMessageStreamResponse()
+    // createUIMessageStreamResponse is the correct v7 standalone API.
+    // result.toUIMessageStreamResponse() is deprecated in AI SDK v7.
+    return createUIMessageStreamResponse({
+      stream: result.toUIMessageStream(),
+    })
   } catch (error) {
     console.error('[Ask Slate] Error:', error)
     return Response.json(

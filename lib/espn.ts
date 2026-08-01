@@ -255,7 +255,11 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
           : undefined
 
         games.push({
-          id: isTennis ? `${event.id}-${compIndex}` : event.id,
+          // Prefix with leagueId so identical ESPN event IDs from different leagues
+          // (e.g. MLS vs CONCACAF sharing the same event slug) don't collide as React keys.
+          id: isTennis
+            ? `${league.id}-${event.id}-${compIndex}`
+            : `${league.id}-${event.id}`,
           leagueId: league.id,
           leagueLabel: league.label,
           leagueShort: league.shortLabel,
@@ -734,42 +738,62 @@ const PGA_BIG_NAMES = new Set([
 
 export async function getPGALeaderboard(): Promise<PGAPlayer[]> {
   try {
-    const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard", {
+    // ESPN only exposes golf data via /scoreboard (not /leaderboard).
+    // The scoreboard returns competitors sorted by `order` (leaderboard position).
+    // `score` is a raw integer (strokes vs par), `linescores` are per-round scores.
+    const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard", {
       next: { revalidate: 120 },
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     })
     if (!res.ok) return []
     const data = (await res.json()) as {
       events?: {
+        name?: string
         competitions?: {
+          status?: { type?: { completed?: boolean; description?: string } }
           competitors?: {
+            order?: number
             athlete?: { displayName?: string; shortName?: string }
-            status?: { position?: { displayName?: string }; thru?: string; today?: string }
-            score?: { displayValue?: string }
-            linescores?: { value?: number | string }[]
+            score?: number | string
+            linescores?: { displayValue?: string; value?: number | string }[]
           }[]
         }[]
       }[]
     }
 
     const competitors = data.events?.[0]?.competitions?.[0]?.competitors ?? []
-    const players: PGAPlayer[] = competitors.slice(0, 50).map((c, i) => {
+    const players: PGAPlayer[] = competitors.slice(0, 70).map((c) => {
       const name = c.athlete?.displayName ?? "Unknown"
+      const rawScore = c.score
+      // Format score as "+N", "-N", or "E"
+      const scoreNum = rawScore !== undefined && rawScore !== null ? Number(rawScore) : null
+      const scoreStr =
+        scoreNum === null
+          ? "E"
+          : scoreNum === 0
+            ? "E"
+            : scoreNum > 0
+              ? `+${scoreNum}`
+              : `${scoreNum}`
+      // Latest round score from last linescore entry
+      const ls = c.linescores ?? []
+      const lastRound = ls[ls.length - 1]?.displayValue ?? ls[ls.length - 1]?.value?.toString() ?? "-"
+
       return {
-        position: i + 1,
+        position: c.order ?? 99,
         name,
         shortName: c.athlete?.shortName ?? name,
-        score: c.score?.displayValue ?? "E",
-        today: c.status?.today ?? "-",
-        thru: c.status?.thru ?? "-",
+        score: scoreStr,
+        today: lastRound,
+        thru: "-",
         isBigName: PGA_BIG_NAMES.has(name),
       }
     })
 
-    // Sort: top 10 by actual position, but always surface big names in top 20 view
+    // Sort by actual leaderboard position, but always surface big names within top 25
     return players.sort((a, b) => {
-      if (a.isBigName && !b.isBigName && b.position > 15) return -1
-      if (b.isBigName && !a.isBigName && a.position > 15) return 1
+      if (a.isBigName && !b.isBigName && b.position > 20) return -1
+      if (b.isBigName && !a.isBigName && a.position > 20) return 1
       return a.position - b.position
     })
   } catch {
