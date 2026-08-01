@@ -7,11 +7,11 @@ import { getTodaysGames } from "@/lib/espn"
 export const revalidate = 300
 
 export default async function Page() {
-  const { games, news, statcast, fetchedAt } = await getTodaysGames()
+  const { games, news, statcast, f1Standings, pgaLeaderboard, fetchedAt } = await getTodaysGames()
 
   return (
     <main className="min-h-screen bg-background">
-      <SportsGuide games={games} news={news} statcast={statcast} fetchedAt={fetchedAt} />
+      <SportsGuide games={games} news={news} statcast={statcast} f1Standings={f1Standings} pgaLeaderboard={pgaLeaderboard} fetchedAt={fetchedAt} />
     </main>
   )
 }

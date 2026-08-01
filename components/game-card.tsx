@@ -63,6 +63,8 @@ function TeamRow({
   winner,
   showScore,
   pitcher,
+  sets,
+  isTennis,
 }: {
   name: string
   short: string
@@ -72,6 +74,8 @@ function TeamRow({
   winner?: boolean
   showScore: boolean
   pitcher?: ProbablePitcher
+  sets?: string[]
+  isTennis?: boolean
 }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -90,17 +94,34 @@ function TeamRow({
           >
             {name}
           </span>
-          {record ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{record}</span> : null}
+          {record && !isTennis ? <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">{record}</span> : null}
         </div>
-        {showScore && score !== undefined ? (
-          <span
-            className={`shrink-0 font-mono text-base tabular-nums leading-none ${
-              winner ? "font-extrabold text-primary" : "font-semibold text-foreground"
-            }`}
-          >
-            {score}
-          </span>
-        ) : null}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Tennis: individual set scores */}
+          {isTennis && sets && sets.length > 0 ? (
+            <div className="flex items-center gap-1">
+              {sets.map((s, i) => (
+                <span
+                  key={i}
+                  className={`font-mono text-xs tabular-nums px-1 rounded ${
+                    winner ? "font-bold text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {showScore && score !== undefined ? (
+            <span
+              className={`font-mono text-base tabular-nums leading-none ${
+                winner ? "font-extrabold text-primary" : "font-semibold text-foreground"
+              }`}
+            >
+              {score}
+            </span>
+          ) : null}
+        </div>
       </div>
       {pitcher ? (
         <p className="truncate pl-8.5 text-xs text-muted-foreground">
@@ -120,6 +141,7 @@ function TeamRow({
 export function GameCard({ game }: { game: Game }) {
   const showScore = game.state !== "pre"
   const isEvent = game.competitors.length !== 2
+  const isTennis = game.category === "Tennis"
   const vibe = getGameVibe(game)
 
   const card = (
@@ -143,6 +165,11 @@ export function GameCard({ game }: { game: Game }) {
               className={`rounded-sm border px-2 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${VIBE_TONE_CLASS[vibe.tone]}`}
             >
               {vibe.label}
+            </span>
+          ) : null}
+          {isTennis && game.round ? (
+            <span className="rounded-sm bg-secondary px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {game.round}
             </span>
           ) : null}
         </div>
@@ -178,6 +205,8 @@ export function GameCard({ game }: { game: Game }) {
               winner={c.winner}
               showScore={showScore}
               pitcher={game.state === "pre" ? c.probablePitcher : undefined}
+              sets={isTennis ? c.sets : undefined}
+              isTennis={isTennis}
             />
           ))}
         </div>

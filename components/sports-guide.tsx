@@ -6,16 +6,20 @@ import { RefreshCw, Star, Sunrise, Sun, Moon } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
 import { AuthStatus } from "@/components/auth-status"
 import { GameCard } from "@/components/game-card"
+import { KeyDates } from "@/components/key-dates"
 import { SportsNews } from "@/components/sports-news"
 import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
-import { StandingsLeaderboard } from "@/components/standings-leaderboard"
+import { StandingsLeaderboard, F1DriverStandings, F1ConstructorStandings, PGALeaderboard } from "@/components/standings-leaderboard"
 import { StarPerformers } from "@/components/star-performers"
 import {
   LEAGUES,
   isFavoriteGame,
+  type F1Constructor,
+  type F1Driver,
   type Game,
   type LeagueCategory,
   type NewsArticle,
+  type PGAPlayer,
   type SportsData,
   type StatcastHighlight,
 } from "@/lib/espn"
@@ -47,18 +51,22 @@ export function SportsGuide({
   games: initialGames,
   news: initialNews,
   statcast: initialStatcast,
+  f1Standings: initialF1Standings,
+  pgaLeaderboard: initialPGALeaderboard,
   fetchedAt: initialFetchedAt,
 }: {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
+  f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
+  pgaLeaderboard: PGAPlayer[]
   fetchedAt: string
 }) {
   // Poll for fresh data every 60s, revalidate when the tab regains focus or
   // the network reconnects, and keep polling in background tabs. The
   // server-rendered payload seeds the cache so there is never a blank state.
   const { data } = useSWR<SportsData>("/api/games", fetcher, {
-    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, fetchedAt: initialFetchedAt },
+    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, f1Standings: initialF1Standings, pgaLeaderboard: initialPGALeaderboard, fetchedAt: initialFetchedAt },
     refreshInterval: 60_000,
     refreshWhenHidden: true,
     revalidateOnFocus: true,
@@ -67,6 +75,8 @@ export function SportsGuide({
   const games = data?.games ?? initialGames
   const news = data?.news ?? initialNews
   const statcast = data?.statcast ?? initialStatcast
+  const f1Standings = data?.f1Standings ?? initialF1Standings
+  const pgaLeaderboard = data?.pgaLeaderboard ?? initialPGALeaderboard
   const fetchedAt = data?.fetchedAt ?? initialFetchedAt
 
   const [filter, setFilter] = useState<Filter>("all")
@@ -305,23 +315,26 @@ export function SportsGuide({
 
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 
-      {/* Standings-first when a live tournament or MLB playoffs are active */}
-      {filter === "all" && standingsFirst ? (
+      {/* F1 Driver + Constructor standings — always shown */}
+      {filter === "all" ? (
         <>
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
+          <F1DriverStandings drivers={f1Standings.drivers} />
+          <F1ConstructorStandings constructors={f1Standings.constructors} />
         </>
       ) : null}
 
-      {/* Standings after statcast in the default case */}
-      {filter === "all" && !standingsFirst ? (
-        <>
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
-        </>
+      {/* PGA leaderboard — always shown, big names surfaced */}
+      {filter === "all" ? (
+        <PGALeaderboard players={pgaLeaderboard} />
       ) : null}
+
+      {/* MLB standings */}
+      {filter === "all" ? (
+        <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
+      ) : null}
+
+      {/* Key dates: drafts, trade deadlines, opening days, playoffs */}
+      {filter === "all" ? <KeyDates /> : null}
 
       {grouped.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
