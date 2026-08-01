@@ -75,6 +75,8 @@ export interface Competitor {
   winner?: boolean
   record?: string
   probablePitcher?: ProbablePitcher
+  // Tennis: individual set scores e.g. ["6", "4", "7"]
+  sets?: string[]
 }
 
 export type GameState = "pre" | "in" | "post"
@@ -95,6 +97,7 @@ export interface Game {
   venue?: string
   note?: string
   week?: number // NFL/NCAAF week number
+  round?: string // Tennis: e.g. "Round of 128", "Quarterfinals", "Final"
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
   leaders?: GameLeader[] // Star performers (populated for live games)
 }
@@ -158,6 +161,8 @@ interface EspnCompetitor {
   records?: { summary?: string }[]
   probables?: EspnProbable[]
   leaders?: EspnLeaderGroup[]
+  // Tennis: set-by-set scores
+  linescores?: { value?: number | string }[]
 }
 
 function mapProbablePitcher(c: EspnCompetitor): ProbablePitcher | undefined {
@@ -194,6 +199,10 @@ function extractBroadcasts(comp: EspnCompetition): string[] {
 function mapCompetitor(c: EspnCompetitor): Competitor {
   const team = c.team
   const athlete = c.athlete
+  const sets =
+    c.linescores && c.linescores.length > 0
+      ? c.linescores.map((s) => String(s.value ?? ""))
+      : undefined
   return {
     name: team?.displayName ?? athlete?.displayName ?? "TBD",
     shortName: team?.shortDisplayName ?? team?.abbreviation ?? athlete?.shortName ?? "TBD",
@@ -203,6 +212,7 @@ function mapCompetitor(c: EspnCompetitor): Competitor {
     winner: c.winner,
     record: c.records?.[0]?.summary,
     probablePitcher: mapProbablePitcher(c),
+    sets,
   }
 }
 
@@ -239,6 +249,11 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
         const matchName = isTennis
           ? competitors.map((c) => c.shortName).join(" vs ")
           : (event.name ?? event.shortName ?? "")
+        // Tennis round from the competition note headline or event name
+        const tennisRound = isTennis
+          ? (comp.notes?.[0]?.headline ?? event.name ?? undefined)
+          : undefined
+
         games.push({
           id: isTennis ? `${event.id}-${compIndex}` : event.id,
           leagueId: league.id,
@@ -253,7 +268,8 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
           competitors,
           broadcasts: extractBroadcasts(comp),
           venue: comp.venue?.fullName,
-          note: comp.notes?.[0]?.headline ?? (isTennis ? event.name : undefined),
+          note: isTennis ? event.name : (comp.notes?.[0]?.headline ?? undefined),
+          round: tennisRound,
           week: isFootball ? (event.week?.number ?? data.week?.number) : undefined,
           link:
             (event.links ?? []).find((l) => l.text === "Gamecast")?.href ??
@@ -586,19 +602,198 @@ export async function getStatcastHighlights(): Promise<StatcastHighlight[]> {
   }
 }
 
+// ---------- F1 Standings (driver + constructor) ----------
+
+export interface F1Driver {
+  position: number
+  name: string
+  shortName: string
+  team: string
+  teamShort: string
+  points: number
+  wins: number
+  logo?: string // constructor logo
+}
+
+export interface F1Constructor {
+  position: number
+  name: string
+  shortName: string
+  points: number
+  wins: number
+  logo?: string
+}
+
+interface EspnStandingsEntry {
+  athlete?: { displayName?: string; shortName?: string }
+  team?: { displayName?: string; shortDisplayName?: string; abbreviation?: string; logos?: { href?: string }[] }
+  stats?: { name?: string; value?: number | string; displayValue?: string }[]
+}
+
+interface EspnStandingsGroup {
+  standings?: { entries?: EspnStandingsEntry[] }
+  entries?: EspnStandingsEntry[]
+}
+
+interface EspnStandingsResponse {
+  standings?: {
+    entries?: EspnStandingsEntry[]
+    groups?: EspnStandingsGroup[]
+  }
+  children?: { standings?: { entries?: EspnStandingsEntry[] } }[]
+}
+
+function statVal(stats: EspnStandingsEntry["stats"], name: string): number {
+  const s = (stats ?? []).find((s) => s.name === name)
+  const v = s?.value ?? s?.displayValue
+  return v !== undefined ? Number(v) : 0
+}
+
+export async function getF1Standings(): Promise<{ drivers: F1Driver[]; constructors: F1Constructor[] }> {
+  const [driverRes, constructorRes] = await Promise.all([
+    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2025&type=driver", {
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    }),
+    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2025&type=constructor", {
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    }),
+  ])
+
+  const drivers: F1Driver[] = []
+  const constructors: F1Constructor[] = []
+
+  if (driverRes.ok) {
+    const data = (await driverRes.json()) as EspnStandingsResponse
+    const entries =
+      data.standings?.entries ??
+      data.standings?.groups?.flatMap((g) => g.standings?.entries ?? g.entries ?? []) ??
+      data.children?.flatMap((c) => c.standings?.entries ?? []) ??
+      []
+    entries.forEach((e, i) => {
+      const name = e.athlete?.displayName ?? e.team?.displayName ?? ""
+      if (!name) return
+      drivers.push({
+        position: i + 1,
+        name,
+        shortName: e.athlete?.shortName ?? e.team?.shortDisplayName ?? name,
+        team: e.team?.displayName ?? "",
+        teamShort: e.team?.abbreviation ?? e.team?.shortDisplayName ?? "",
+        points: statVal(e.stats, "points") || statVal(e.stats, "pts") || statVal(e.stats, "totalPoints"),
+        wins: statVal(e.stats, "wins") || statVal(e.stats, "w"),
+        logo: e.team?.logos?.[0]?.href,
+      })
+    })
+  }
+
+  if (constructorRes.ok) {
+    const data = (await constructorRes.json()) as EspnStandingsResponse
+    const entries =
+      data.standings?.entries ??
+      data.standings?.groups?.flatMap((g) => g.standings?.entries ?? g.entries ?? []) ??
+      data.children?.flatMap((c) => c.standings?.entries ?? []) ??
+      []
+    entries.forEach((e, i) => {
+      const name = e.team?.displayName ?? ""
+      if (!name) return
+      constructors.push({
+        position: i + 1,
+        name,
+        shortName: e.team?.shortDisplayName ?? e.team?.abbreviation ?? name,
+        points: statVal(e.stats, "points") || statVal(e.stats, "pts") || statVal(e.stats, "totalPoints"),
+        wins: statVal(e.stats, "wins") || statVal(e.stats, "w"),
+        logo: e.team?.logos?.[0]?.href,
+      })
+    })
+  }
+
+  return { drivers, constructors }
+}
+
+// ---------- PGA Leaderboard ----------
+
+export interface PGAPlayer {
+  position: number
+  name: string
+  shortName: string
+  score: string // e.g. "-12" or "E"
+  today: string // today's round score
+  thru: string // e.g. "F" or "12"
+  isBigName: boolean
+  logo?: string
+}
+
+// Top names to prioritize in the leaderboard
+const PGA_BIG_NAMES = new Set([
+  "Scottie Scheffler", "Rory McIlroy", "Jon Rahm", "Brooks Koepka", "Xander Schauffele",
+  "Patrick Cantlay", "Viktor Hovland", "Collin Morikawa", "Justin Thomas", "Jordan Spieth",
+  "Dustin Johnson", "Tiger Woods", "Phil Mickelson", "Bryson DeChambeau", "Tony Finau",
+  "Shane Lowry", "Tommy Fleetwood", "Ludvig Aberg", "Hideki Matsuyama", "Max Homa",
+])
+
+export async function getPGALeaderboard(): Promise<PGAPlayer[]> {
+  try {
+    const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/golf/pga/leaderboard", {
+      next: { revalidate: 120 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      events?: {
+        competitions?: {
+          competitors?: {
+            athlete?: { displayName?: string; shortName?: string }
+            status?: { position?: { displayName?: string }; thru?: string; today?: string }
+            score?: { displayValue?: string }
+            linescores?: { value?: number | string }[]
+          }[]
+        }[]
+      }[]
+    }
+
+    const competitors = data.events?.[0]?.competitions?.[0]?.competitors ?? []
+    const players: PGAPlayer[] = competitors.slice(0, 50).map((c, i) => {
+      const name = c.athlete?.displayName ?? "Unknown"
+      return {
+        position: i + 1,
+        name,
+        shortName: c.athlete?.shortName ?? name,
+        score: c.score?.displayValue ?? "E",
+        today: c.status?.today ?? "-",
+        thru: c.status?.thru ?? "-",
+        isBigName: PGA_BIG_NAMES.has(name),
+      }
+    })
+
+    // Sort: top 10 by actual position, but always surface big names in top 20 view
+    return players.sort((a, b) => {
+      if (a.isBigName && !b.isBigName && b.position > 15) return -1
+      if (b.isBigName && !a.isBigName && a.position > 15) return 1
+      return a.position - b.position
+    })
+  } catch {
+    return []
+  }
+}
+
 export interface SportsData {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
+  f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
+  pgaLeaderboard: PGAPlayer[]
   fetchedAt: string
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const [results, news, statcast] = await Promise.all([
+  const [results, news, statcast, f1Standings, pgaLeaderboard] = await Promise.all([
     Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league)))),
     getTopNews(),
     getStatcastHighlights(),
+    getF1Standings(),
+    getPGALeaderboard(),
   ])
   const games = results.flat()
-  return { games, news, statcast, fetchedAt: new Date().toISOString() }
+  return { games, news, statcast, f1Standings, pgaLeaderboard, fetchedAt: new Date().toISOString() }
 }
