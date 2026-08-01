@@ -1,4 +1,4 @@
-import { generateText, stepCountIs, tool } from 'ai'
+import { streamText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
@@ -62,9 +62,17 @@ const SOCIAL_SOURCES = ['x.com', 'twitter.com', 'reddit.com', 'youtube.com']
 // The full universe the model may search across.
 const ALL_SOURCES = [...SPORTS_SOURCES, ...NEWS_SOURCES, ...SOCIAL_SOURCES]
 
+// Mark as dynamic so Next.js doesn't try to cache a streaming response.
+export const dynamic = 'force-dynamic'
+
 export async function POST(req: Request) {
   try {
-    const { question } = await req.json() as { question: string }
+    const body = await req.json() as { question?: string; messages?: { role: string; content: string }[] }
+    // Support both the legacy { question } shape and the useChat { messages } shape.
+    const question =
+      body.question ??
+      [...(body.messages ?? [])].reverse().find((m) => m.role === 'user')?.content ?? ''
+
     if (!question || typeof question !== 'string') {
       return Response.json({ error: 'Question required' }, { status: 400 })
     }
@@ -241,10 +249,11 @@ export async function POST(req: Request) {
       }),
     }
 
-    const response = await generateText({
+    const result = streamText({
       model: MODEL,
       tools,
       toolChoice: 'auto',
+      stopWhen: stepCountIs(8),
       system: `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
 
 You have access to:
@@ -259,8 +268,8 @@ Rules:
 - For schedule/score questions → use searchSchedule or findNextGame.
 - For stats, trades, injuries, news, standings, analysis, or social buzz → use webSearch. Choose the scope deliberately: "sports" for official stats/news, "news" for business/legal/breaking wire stories, "social" (X/Twitter, Reddit) for insider reports, rumors, and reactions, "all" to cast the widest net, and "open" only when the topic is niche and none of the curated sources fit.
 - For breaking news and live rumors, set recency to "day" and prefer the "social" or "all" scope. For historical stats, set recency to "any".
-- Cite your source (site name, or the handle/platform for X/Reddit) when using webSearch results.
-- Max 2–3 sentences per answer. Numbers and facts over prose.
+- Cite your source (site name, or handle/platform for X/Reddit) when using webSearch results.
+- Use **bold** for team names, player names, and key numbers. Use bullet points for lists of 3+ items.
 - Today's date: ${now.toLocaleDateString()}.
 
 When summarizing a live or completed game (or previewing an upcoming one), lead with the ONE descriptor that best captures its character, then back it with the decisive number(s). Draw from this vocabulary and apply it honestly — only use a label the data supports:
@@ -271,10 +280,9 @@ When summarizing a live or completed game (or previewing an upcoming one), lead 
 Current live schedule context:
 ${scheduleContext}`,
       prompt: question,
-      stopWhen: stepCountIs(4),
     })
 
-    return Response.json({ answer: response.text })
+    return result.toUIMessageStreamResponse()
   } catch (error) {
     console.error('[Ask Slate] Error:', error)
     return Response.json(
