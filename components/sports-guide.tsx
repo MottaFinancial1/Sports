@@ -271,6 +271,14 @@ export function SportsGuide({
         ))}
       </nav>
 
+      {/* Hero row — Ask Ball Knowledge + Biggest News front and center */}
+      {filter === "all" ? (
+        <div className="mb-10 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+          <AskSlate />
+          <SportsNews articles={news} />
+        </div>
+      ) : null}
+
       {filter === "all" ? (
         <SportSpotlight
           games={games}
@@ -308,10 +316,6 @@ export function SportsGuide({
           </div>
         </section>
       ) : null}
-
-      {filter === "all" ? <AskSlate /> : null}
-
-      {filter === "all" ? <SportsNews articles={news} /> : null}
 
       {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
 

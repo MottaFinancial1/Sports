@@ -29,7 +29,7 @@ export function SportsNews({ articles }: { articles: NewsArticle[] }) {
   const [lead, ...rest] = articles
 
   return (
-    <section className="mb-10">
+    <section className="flex flex-col">
       <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
         <Newspaper className="h-3.5 w-3.5" aria-hidden="true" />
         Biggest News in Sports
