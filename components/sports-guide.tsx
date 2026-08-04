@@ -53,6 +53,7 @@ export function SportsGuide({
   statcast: initialStatcast,
   f1Standings: initialF1Standings,
   pgaLeaderboard: initialPGALeaderboard,
+  mlbStandings: initialMlbStandings,
   fetchedAt: initialFetchedAt,
 }: {
   games: Game[]
@@ -60,13 +61,14 @@ export function SportsGuide({
   statcast: StatcastHighlight[]
   f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
   pgaLeaderboard: PGAPlayer[]
+  mlbStandings: import("@/lib/espn").MLBStandingTeam[]
   fetchedAt: string
 }) {
   // Poll for fresh data every 60s, revalidate when the tab regains focus or
   // the network reconnects, and keep polling in background tabs. The
   // server-rendered payload seeds the cache so there is never a blank state.
   const { data } = useSWR<SportsData>("/api/games", fetcher, {
-    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, f1Standings: initialF1Standings, pgaLeaderboard: initialPGALeaderboard, fetchedAt: initialFetchedAt },
+    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, f1Standings: initialF1Standings, pgaLeaderboard: initialPGALeaderboard, mlbStandings: initialMlbStandings, fetchedAt: initialFetchedAt },
     refreshInterval: 60_000,
     refreshWhenHidden: true,
     revalidateOnFocus: true,
@@ -77,6 +79,7 @@ export function SportsGuide({
   const statcast = data?.statcast ?? initialStatcast
   const f1Standings = data?.f1Standings ?? initialF1Standings
   const pgaLeaderboard = data?.pgaLeaderboard ?? initialPGALeaderboard
+  const mlbStandings = data?.mlbStandings ?? initialMlbStandings
   const fetchedAt = data?.fetchedAt ?? initialFetchedAt
 
   const [filter, setFilter] = useState<Filter>("all")
@@ -334,7 +337,7 @@ export function SportsGuide({
 
       {/* MLB standings */}
       {filter === "all" ? (
-        <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
+        <StandingsLeaderboard standings={mlbStandings} />
       ) : null}
 
       {/* Key dates: drafts, trade deadlines, opening days, playoffs */}

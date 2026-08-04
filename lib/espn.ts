@@ -801,23 +801,95 @@ export async function getPGALeaderboard(): Promise<PGAPlayer[]> {
   }
 }
 
+// ---------- MLB Standings (live via MLB Stats API) ----------
+
+export interface MLBStandingTeam {
+  teamId: number
+  name: string
+  shortName: string
+  abbreviation: string
+  division: string
+  wins: number
+  losses: number
+  pct: string
+  gb: string
+  logo: string
+}
+
+export async function getMLBStandings(): Promise<MLBStandingTeam[]> {
+  try {
+    const res = await fetch(
+      "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2025&standingsTypes=regularSeason&hydrate=team",
+      {
+        next: { revalidate: 300 },
+        headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+      },
+    )
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      records?: {
+        division?: { id?: number; nameShort?: string }
+        teamRecords?: {
+          team?: { id?: number; name?: string; teamName?: string; abbreviation?: string; clubName?: string }
+          wins?: number
+          losses?: number
+          winningPercentage?: string
+          gamesBack?: string
+          divisionRank?: string
+        }[]
+      }[]
+    }
+
+    const divisionNames: Record<number, string> = {
+      200: "AL West", 201: "AL East", 202: "AL Central",
+      203: "NL West", 204: "NL East", 205: "NL Central",
+    }
+
+    const teams: MLBStandingTeam[] = []
+    for (const record of data.records ?? []) {
+      const divId = record.division?.id ?? 0
+      const division = divisionNames[divId] ?? record.division?.nameShort ?? "Unknown"
+      for (const tr of record.teamRecords ?? []) {
+        const teamId = tr.team?.id ?? 0
+        teams.push({
+          teamId,
+          name: tr.team?.name ?? "Unknown",
+          shortName: tr.team?.teamName ?? tr.team?.clubName ?? tr.team?.abbreviation ?? "???",
+          abbreviation: tr.team?.abbreviation ?? "???",
+          division,
+          wins: tr.wins ?? 0,
+          losses: tr.losses ?? 0,
+          pct: tr.winningPercentage ?? ".000",
+          gb: tr.gamesBack ?? "-",
+          logo: teamId ? `https://www.mlbstatic.com/team-logos/${teamId}.svg` : "",
+        })
+      }
+    }
+    return teams
+  } catch {
+    return []
+  }
+}
+
 export interface SportsData {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
   f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
   pgaLeaderboard: PGAPlayer[]
+  mlbStandings: MLBStandingTeam[]
   fetchedAt: string
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const [results, news, statcast, f1Standings, pgaLeaderboard] = await Promise.all([
+  const [results, news, statcast, f1Standings, pgaLeaderboard, mlbStandings] = await Promise.all([
     Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStormChasers() : fetchLeague(league)))),
     getTopNews(),
     getStatcastHighlights(),
     getF1Standings(),
     getPGALeaderboard(),
+    getMLBStandings(),
   ])
   const games = results.flat()
-  return { games, news, statcast, f1Standings, pgaLeaderboard, fetchedAt: new Date().toISOString() }
+  return { games, news, statcast, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt: new Date().toISOString() }
 }

@@ -63,6 +63,7 @@ function TeamRow({
   winner,
   showScore,
   pitcher,
+  pitcherLabel,
   sets,
   isTennis,
 }: {
@@ -74,6 +75,7 @@ function TeamRow({
   winner?: boolean
   showScore: boolean
   pitcher?: ProbablePitcher
+  pitcherLabel?: string
   sets?: string[]
   isTennis?: boolean
 }) {
@@ -124,7 +126,10 @@ function TeamRow({
         </div>
       </div>
       {pitcher ? (
-        <p className="truncate pl-8.5 text-xs text-muted-foreground">
+        <p className="truncate pl-[34px] text-xs text-muted-foreground">
+          {pitcherLabel ? (
+            <span className="mr-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/60">{pitcherLabel}</span>
+          ) : null}
           <span className="font-semibold text-foreground/80">{pitcher.name}</span>
           {pitcher.record || pitcher.era ? (
             <span>
@@ -204,7 +209,8 @@ export function GameCard({ game }: { game: Game }) {
               record={c.record}
               winner={c.winner}
               showScore={showScore}
-              pitcher={game.state === "pre" ? c.probablePitcher : undefined}
+              pitcher={game.category === "Baseball" ? c.probablePitcher : undefined}
+              pitcherLabel={game.category === "Baseball" ? (game.state === "in" ? "pitching" : "probable") : undefined}
               sets={isTennis ? c.sets : undefined}
               isTennis={isTennis}
             />
