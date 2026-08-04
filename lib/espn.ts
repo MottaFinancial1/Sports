@@ -24,8 +24,8 @@ export interface LeagueConfig {
 
 export const LEAGUES: LeagueConfig[] = [
   { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "baseball/mlb" },
-  // Triple-A (Gwinnett Stripers) comes from the MLB Stats API, not ESPN —
-  // path is unused; getTodaysGames routes this id to fetchStripers().
+  // Triple-A (Omaha Storm Chasers) comes from the MLB Stats API, not ESPN —
+  // path is unused; getTodaysGames routes this id to fetchStormChasers().
   { id: "aaa", label: "Triple-A", shortLabel: "AAA", category: "Baseball", path: "" },
   { id: "nfl", label: "NFL", shortLabel: "NFL", category: "Football", path: "football/nfl" },
   {
@@ -313,9 +313,9 @@ function extractLeaders(comp: EspnCompetition): GameLeader[] | undefined {
   return leaders.length > 0 ? leaders : undefined
 }
 
-// ---------- Gwinnett Stripers (Triple-A) via the MLB Stats API ----------
+// ---------- Omaha Storm Chasers (Triple-A) via the MLB Stats API ----------
 
-const STRIPERS_TEAM_ID = 431 // Gwinnett Stripers, International League (AAA)
+const STORM_CHASERS_TEAM_ID = 541 // Omaha Storm Chasers, Pacific Coast League (AAA)
 
 interface StatsApiGame {
   gamePk: number
@@ -361,10 +361,10 @@ function mapStatsApiSide(side: StatsApiSide | undefined, isHome: boolean, won?: 
   }
 }
 
-async function fetchStripers(): Promise<Game[]> {
+async function fetchStormChasers(): Promise<Game[]> {
   // No date param: the schedule endpoint defaults to today, so it rolls over
   // to the new day automatically, same as the ESPN scoreboards.
-  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STRIPERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STORM_CHASERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
   try {
     const res = await fetch(url, {
       next: { revalidate: 60 },
@@ -416,7 +416,7 @@ async function fetchStripers(): Promise<Game[]> {
 // ---------- Favorites ----------
 
 // Games featuring these teams are pinned in a Favorites section at the top.
-export const FAVORITE_TEAMS = ["Los Angeles Angels", "Boston Red Sox", "Gwinnett Stripers"]
+export const FAVORITE_TEAMS = ["Los Angeles Angels", "Boston Red Sox", "Omaha Storm Chasers"]
 
 export function isFavoriteGame(game: Game): boolean {
   return game.competitors.some((c) => FAVORITE_TEAMS.some((fav) => c.name.includes(fav) || fav.includes(c.name)))
@@ -812,7 +812,7 @@ export interface SportsData {
 
 export async function getTodaysGames(): Promise<SportsData> {
   const [results, news, statcast, f1Standings, pgaLeaderboard] = await Promise.all([
-    Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league)))),
+    Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStormChasers() : fetchLeague(league)))),
     getTopNews(),
     getStatcastHighlights(),
     getF1Standings(),

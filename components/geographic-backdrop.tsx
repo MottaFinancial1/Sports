@@ -3,7 +3,7 @@
 const LOCATIONS = [
   { code: "LAX", city: "Anaheim", detail: "Angels", position: "left-[5%] top-[20%]", tone: "border-destructive/30 text-destructive/50" },
   { code: "BOS", city: "Boston", detail: "Red Sox", position: "right-[4%] top-[14%]", tone: "border-primary/30 text-primary/50" },
-  { code: "ATL", city: "Gwinnett", detail: "Stripers", position: "right-[8%] bottom-[18%]", tone: "border-primary/20 text-primary/35" },
+  { code: "OMA", city: "Omaha", detail: "Storm Chasers", position: "left-[38%] top-[30%]", tone: "border-primary/20 text-primary/35" },
 ]
 
 /**
