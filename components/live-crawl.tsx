@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Game } from "@/lib/espn"
 
 interface CrawlItem {
@@ -72,9 +72,15 @@ function buildItems(games: Game[]): CrawlItem[] {
 }
 
 export function LiveCrawl({ games }: { games: Game[] }) {
-  const items = useMemo(() => buildItems(games), [games])
+  // buildItems uses Date.now() + locale formatting — must be client-only to
+  // avoid server/client timezone mismatch that causes hydration errors.
+  const [items, setItems] = useState<CrawlItem[]>([])
   const [paused, setPaused] = useState(false)
   const trackRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    setItems(buildItems(games))
+  }, [games])
 
   if (items.length === 0) return null
 
