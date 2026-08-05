@@ -5,7 +5,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { LogIn, LogOut, User as UserIcon } from "lucide-react"
 import type { User } from "@supabase/supabase-js"
-import { createClient } from "@/lib/supabase/client"
+import { createClient, isSupabaseConfigured } from "@/lib/supabase/client"
 
 export function AuthStatus() {
   const [user, setUser] = useState<User | null>(null)
@@ -13,6 +13,11 @@ export function AuthStatus() {
   const router = useRouter()
 
   useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setLoading(false)
+      return
+    }
+
     const supabase = createClient()
 
     supabase.auth.getUser().then(({ data }) => {
@@ -30,6 +35,7 @@ export function AuthStatus() {
   }, [])
 
   const handleSignOut = async () => {
+    if (!isSupabaseConfigured()) return
     const supabase = createClient()
     await supabase.auth.signOut()
     setUser(null)
