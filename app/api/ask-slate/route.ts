@@ -24,10 +24,26 @@ type Intent =
   | 'news'
   | 'general'
 
+// Division / conference name patterns that always imply standings intent.
+const DIVISION_PATTERN =
+  /\b(nl|al|afc|nfc|eastern|western|central|north|south|atlantic|pacific|metropolitan)\s+(east|west|central|north|south|division|conference)?\b|\b(nl|al)\s+(east|west|central)\b|\b(american league|national league)\s+(east|west|central)\b/i
+
 function classifyIntent(q: string): Intent {
   const lower = q.toLowerCase()
-  if (/\b(standing|rank|table|division|leaderboard|top of|first place|last place|points leader|position)\b/.test(lower))
+
+  // Standings — broad set of phrases, including implicit "who leads / who's first" patterns.
+  if (
+    // Explicit standings vocabulary
+    /\b(standing|rank(ing|ings|ed)?|table|leaderboard|points leader|points table)\b/.test(lower) ||
+    // Division / conference names are a dead giveaway
+    DIVISION_PATTERN.test(lower) ||
+    // "Who leads / who's first / who's on top" type questions
+    /\b(who (leads?|is (first|second|third|on top|in (first|last)|ahead)|has (the )?best (record|win)|tops?|leads? the)\b|leading (the )?(division|league|conference|standings)|division leader|first place|last place|top of (the )?(table|division|league|standings)|best record|worst record|games? back|gb|in (first|last) place|position in (the )?(league|table|division)|how (many games? )?(back|ahead))\b/.test(lower) ||
+    // "Where do the [team] sit / rank / stand"
+    /\b(where (do|does|are|is) .{2,30} (sit|stand|rank|place)|how (are|is) .{2,20} (doing|performing) in the (division|league|standings))\b/.test(lower)
+  )
     return 'standings'
+
   if (/\b(live|right now|happening|current(ly)?|score(s|line)?|final|result|winning|losing|inning|quarter|half|period|overtime)\b/.test(lower))
     return 'live_scores'
   if (/\b(next game|schedule|when (do|does|is|are)|upcoming|tip.?off|first pitch|kick.?off|tee time|start time|broadcast|channel|watch|air)\b/.test(lower))
@@ -40,7 +56,14 @@ function classifyIntent(q: string): Intent {
 // ─── Entity extraction ────────────────────────────────────────────────────────
 
 const LEAGUE_ALIASES: Record<string, string[]> = {
-  mlb: ['mlb', 'baseball', 'major league baseball'],
+  // MLB division names (NL/AL East/West/Central) are unique identifiers for baseball.
+  mlb: [
+    'mlb', 'baseball', 'major league baseball',
+    'nl east', 'nl west', 'nl central',
+    'al east', 'al west', 'al central',
+    'national league east', 'national league west', 'national league central',
+    'american league east', 'american league west', 'american league central',
+  ],
   nfl: ['nfl', 'football', 'national football league'],
   ncaaf: ['ncaaf', 'college football', 'cfb'],
   nba: ['nba', 'basketball', 'national basketball'],
@@ -154,19 +177,65 @@ function buildNewsContext(news: NewsArticle[], leagueFilter: string | null, q: s
   return top.length ? top.join('\n') : 'No recent news found for this query.'
 }
 
-function buildMLBStandingsContext(teams: MLBStandingTeam[]): string {
+// Detect which specific division (if any) the user is asking about.
+function extractDivision(q: string): string | null {
+  const lower = q.toLowerCase()
+  const divMap: Record<string, string[]> = {
+    'NL West':    ['nl west', 'national league west'],
+    'NL East':    ['nl east', 'national league east'],
+    'NL Central': ['nl central', 'national league central'],
+    'AL West':    ['al west', 'american league west'],
+    'AL East':    ['al east', 'american league east'],
+    'AL Central': ['al central', 'american league central'],
+  }
+  for (const [div, aliases] of Object.entries(divMap)) {
+    if (aliases.some((a) => lower.includes(a))) return div
+  }
+  return null
+}
+
+function buildMLBStandingsContext(teams: MLBStandingTeam[], q = ''): string {
+  const targetDiv = extractDivision(q)
   const byDivision: Record<string, MLBStandingTeam[]> = {}
   for (const t of teams) {
     if (!byDivision[t.division]) byDivision[t.division] = []
     byDivision[t.division].push(t)
   }
-  return Object.entries(byDivision)
-    .map(([div, ts]) => {
-      const rows = ts
-        .sort((a, b) => b.wins - a.wins || a.losses - b.losses)
-        .map((t) => `  ${t.shortName} ${t.wins}-${t.losses} (.${t.pct.replace('0.', '').replace('.', '')}) GB: ${t.gb}`)
-        .join('\n')
-      return `${div}:\n${rows}`
+
+  // Division order: AL first, then NL; within each league: East, Central, West.
+  const divOrder = ['AL East', 'AL Central', 'AL West', 'NL East', 'NL Central', 'NL West']
+  const entries = divOrder
+    .filter((d) => byDivision[d])
+    .map((div) => ({ div, teams: byDivision[div] }))
+
+  // If the question names a specific division, put that division first (or only show it).
+  if (targetDiv) {
+    const target = entries.find((e) => e.div === targetDiv)
+    if (target) {
+      // Show the target division prominently, then append others for context.
+      const rest = entries.filter((e) => e.div !== targetDiv)
+      const renderDiv = ({ div, teams: ts }: { div: string; teams: MLBStandingTeam[] }) => {
+        const sorted = [...ts].sort((a, b) => b.wins - a.wins || a.losses - b.losses)
+        const rows = sorted.map((t, i) => {
+          const rank = i === 0 ? '1st (LEADER)' : `${i + 1}${i === 1 ? 'nd' : i === 2 ? 'rd' : 'th'}`
+          const gbStr = t.gb === '-' || t.gb === '0' || t.gb === '0.0' ? 'GB: —' : `GB: ${t.gb}`
+          return `  ${rank}  ${t.shortName} (${t.abbreviation})  ${t.wins}-${t.losses} (${t.pct})  ${gbStr}`
+        })
+        return `${div}:\n${rows.join('\n')}`
+      }
+      return [renderDiv(target), ...rest.map(renderDiv)].join('\n\n')
+    }
+  }
+
+  // No specific division — show all six with condensed rows.
+  return entries
+    .map(({ div, teams: ts }) => {
+      const sorted = [...ts].sort((a, b) => b.wins - a.wins || a.losses - b.losses)
+      const rows = sorted.map((t, i) => {
+        const gbStr = t.gb === '-' || t.gb === '0' || t.gb === '0.0' ? '—' : t.gb
+        return `  ${i + 1}. ${t.shortName} ${t.wins}-${t.losses} (${t.pct}) GB:${gbStr}`
+      })
+      return `${div}:\n${rows.join('\n')}`
     })
     .join('\n\n')
 }
@@ -235,8 +304,8 @@ export async function POST(req: Request) {
 
     switch (intent) {
       case 'standings': {
-        if (leagueFilter === 'mlb') {
-          contextBlock = buildMLBStandingsContext(mlbStandings)
+        if (leagueFilter === 'mlb' || leagueFilter === null && DIVISION_PATTERN.test(question)) {
+          contextBlock = buildMLBStandingsContext(mlbStandings, question)
           intentLabel = 'MLB standings'
         } else if (leagueFilter === 'f1') {
           contextBlock = buildF1StandingsContext(f1Standings.drivers, f1Standings.constructors)
@@ -247,7 +316,7 @@ export async function POST(req: Request) {
         } else {
           // Return whichever standings data is available — prefer MLB/F1/PGA based on mention.
           const parts: string[] = []
-          if (mlbStandings.length) parts.push(buildMLBStandingsContext(mlbStandings))
+          if (mlbStandings.length) parts.push(buildMLBStandingsContext(mlbStandings, question))
           if (f1Standings.drivers.length) parts.push(buildF1StandingsContext(f1Standings.drivers, f1Standings.constructors))
           if (pgaLeaderboard.length) parts.push(buildPGAContext(pgaLeaderboard))
           contextBlock = parts.join('\n\n')
