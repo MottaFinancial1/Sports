@@ -144,3 +144,17 @@
 .scan-line {
   animation: scan-line 3s linear infinite;
 }
+
+/* Subtle data-surface texture: adds depth without competing with content. */
+.data-grid {
+  background-image: linear-gradient(to right, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot,
+  .scan-line {
+    animation: none;
+  }
+}

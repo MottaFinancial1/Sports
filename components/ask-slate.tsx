@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, isTextUIPart } from 'ai'
 import ReactMarkdown from 'react-markdown'
-import { Bot, Send, Sparkles, X } from 'lucide-react'
+import { Bot, CircleCheck, Send, Sparkles, X } from 'lucide-react'
 
 const SUGGESTED = [
   'Any big trades today?',
@@ -78,11 +78,25 @@ export function AskSlate() {
       </div>
 
       {/* Main panel */}
-      <div className="relative flex flex-1 flex-col overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background shadow-sm">
+      <div className="data-grid relative flex flex-1 flex-col overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background shadow-sm">
 
         {/* Top accent bar */}
         <div className="flex h-1 w-full overflow-hidden rounded-t-xl">
           <div className="h-full w-full bg-gradient-to-r from-primary via-primary/60 to-primary/20" />
+        </div>
+
+        {/* Signal row */}
+        <div className="flex items-center justify-between border-b border-primary/10 bg-primary/[0.025] px-4 py-2.5 sm:px-5">
+          <div className="flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+              <CircleCheck className="h-3 w-3" />
+            </span>
+            Live sports context
+          </div>
+          <span className="flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-primary">
+            <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
+            Ready
+          </span>
         </div>
 
         {/* Message thread */}

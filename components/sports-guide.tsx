@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { Activity, RefreshCw, Star } from "lucide-react"
+import { Activity, BarChart3, CalendarDays, Radio, RefreshCw, Star, Trophy } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
 import { AuthStatus } from "@/components/auth-status"
 import { GameCard } from "@/components/game-card"
@@ -203,7 +203,7 @@ export function SportsGuide({
       </div>
 
       {/* Hero header */}
-      <header className="pb-6 pt-10 sm:pt-14">
+      <header className="data-grid relative overflow-hidden rounded-2xl border border-primary/10 bg-card/60 px-5 pb-7 pt-8 sm:px-8 sm:pb-9 sm:pt-12">
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
@@ -222,6 +222,14 @@ export function SportsGuide({
           </p>
         </div>
       </header>
+
+      {/* Compact signal strip */}
+      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <SignalTile icon={<Radio className="h-3.5 w-3.5" />} label="Live now" value={String(liveCount)} tone={liveCount > 0 ? "live" : "neutral"} />
+        <SignalTile icon={<CalendarDays className="h-3.5 w-3.5" />} label="On deck" value={String(games.length)} />
+        <SignalTile icon={<Trophy className="h-3.5 w-3.5" />} label="Leagues" value={String(activeLeagues.length)} />
+        <SignalTile icon={<BarChart3 className="h-3.5 w-3.5" />} label="Updated" value={updated || "—"} />
+      </div>
 
       {/* Filter nav */}
       <nav
@@ -341,6 +349,30 @@ export function SportsGuide({
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function SignalTile({
+  icon,
+  label,
+  value,
+  tone = "neutral",
+}: {
+  icon: React.ReactNode
+  label: string
+  value: string
+  tone?: "live" | "neutral"
+}) {
+  return (
+    <div className="group flex min-w-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition-colors hover:border-primary/30">
+      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tone === "live" ? "bg-destructive/10 text-destructive" : "bg-primary/8 text-primary"}`} aria-hidden="true">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-black tabular-nums text-foreground">{value}</p>
+      </div>
     </div>
   )
 }
