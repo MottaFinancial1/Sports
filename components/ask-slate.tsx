@@ -54,7 +54,7 @@ export function AskSlate() {
   const hasMessages = messages.length > 0
 
   return (
-    <section className="mb-10">
+    <section className="flex h-full flex-col">
       <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
         <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
         Ask Ball Knowledge
@@ -73,7 +73,7 @@ export function AskSlate() {
         )}
       </h2>
 
-      <div className="relative flex flex-col overflow-hidden rounded-lg border border-destructive/30 bg-card shadow-[inset_3px_0_0_var(--color-destructive)]">
+      <div className="relative flex flex-1 flex-col overflow-hidden rounded-lg border border-destructive/30 bg-card shadow-[inset_3px_0_0_var(--color-destructive)]">
         {/* Message thread */}
         <div className="flex max-h-[480px] min-h-[120px] flex-col gap-3 overflow-y-auto p-4 sm:p-5">
           {!hasMessages ? (
