@@ -79,7 +79,7 @@ export function F1DriverStandings({ drivers }: { drivers: F1Driver[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {drivers.slice(0, 20).map((d) => (
+          {drivers.slice(0, 10).map((d) => (
             <tr key={d.name} className="transition-colors hover:bg-secondary/40">
               <RankCell position={d.position} />
               <Td bold>{d.name}</Td>
@@ -161,7 +161,7 @@ export function PGALeaderboard({ players }: { players: PGAPlayer[] }) {
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {players.slice(0, 20).map((p, i) => (
+          {players.slice(0, 10).map((p, i) => (
             <tr
               key={p.name}
               className={`transition-colors hover:bg-secondary/40 ${i < 3 ? "bg-primary/4" : ""}`}
