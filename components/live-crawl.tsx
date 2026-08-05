@@ -12,18 +12,19 @@ interface CrawlItem {
   state: "in" | "pre" | "post"
 }
 
+const SPORT_ORDER = ["Baseball", "Football", "Basketball", "Soccer", "Motorsport", "Golf", "Tennis"]
+
 function buildItems(games: Game[]): CrawlItem[] {
+  const now = Date.now()
+  const sevenDays = now + 7 * 24 * 60 * 60 * 1000
+
+  // Live games — always show regardless of sport, sorted by category priority
   const live = games
     .filter((g) => g.state === "in")
-    .sort((a, b) => {
-      // Prioritise bigger sports first using the same category weight
-      const order = ["Baseball", "Football", "Basketball", "Soccer", "Motorsport", "Golf", "Tennis"]
-      return order.indexOf(a.category) - order.indexOf(b.category)
-    })
+    .sort((a, b) => SPORT_ORDER.indexOf(a.category) - SPORT_ORDER.indexOf(b.category))
     .map<CrawlItem>((g) => {
-      const [away, home] = g.competitors.length === 2
-        ? [g.competitors.find((c) => !c.isHome), g.competitors.find((c) => c.isHome)]
-        : [g.competitors[0], g.competitors[1]]
+      const away = g.competitors.find((c) => !c.isHome) ?? g.competitors[0]
+      const home = g.competitors.find((c) => c.isHome) ?? g.competitors[1]
       const score =
         away?.score && home?.score ? `${away.score}–${home.score}` : undefined
       return {
@@ -36,15 +37,28 @@ function buildItems(games: Game[]): CrawlItem[] {
       }
     })
 
+  // Upcoming — only events starting within the next 7 days (sport is in-season)
   const upcoming = games
-    .filter((g) => g.state === "pre")
+    .filter((g) => {
+      if (g.state !== "pre") return false
+      const t = new Date(g.date).getTime()
+      return t >= now && t <= sevenDays
+    })
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    .slice(0, 12)
+    .slice(0, 14)
     .map<CrawlItem>((g) => {
-      const [away, home] = g.competitors.length === 2
-        ? [g.competitors.find((c) => !c.isHome), g.competitors.find((c) => c.isHome)]
-        : [g.competitors[0], g.competitors[1]]
-      const time = new Date(g.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      const away = g.competitors.find((c) => !c.isHome) ?? g.competitors[0]
+      const home = g.competitors.find((c) => c.isHome) ?? g.competitors[1]
+
+      // Show day + time if the game is further than today, otherwise just time
+      const gameDate = new Date(g.date)
+      const isToday = gameDate.toDateString() === new Date().toDateString()
+      const time = isToday
+        ? gameDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+        : gameDate.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" }) +
+          " " +
+          gameDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+
       return {
         id: g.id,
         league: g.leagueShort,
