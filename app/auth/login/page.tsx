@@ -120,7 +120,6 @@ export default function Page() {
           </Card>
         </div>
       </div>
-      </div>
     </div>
   )
 }
