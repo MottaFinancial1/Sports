@@ -1,77 +1,198 @@
-import { streamText, stepCountIs, tool, createUIMessageStreamResponse, convertToModelMessages } from 'ai'
-import { z } from 'zod'
-import { getTodaysGames } from '@/lib/espn'
+import { streamText, createUIMessageStreamResponse } from 'ai'
+import {
+  getTodaysGames,
+  type Game,
+  type NewsArticle,
+  type MLBStandingTeam,
+  type F1Driver,
+  type F1Constructor,
+  type PGAPlayer,
+} from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
 
 // AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
-// Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
-// needed; locally the AI_GATEWAY_API_KEY env var is used when present.
-// gpt-4.1 is the best balance of speed, accuracy, and cost on the AI Gateway.
-// It has a 1M token context window and strong sports/real-world knowledge.
 const MODEL = 'openai/gpt-4.1'
 
-// Live sports platforms — league sites, broadcasters, and dedicated outlets.
-const SPORTS_SOURCES = [
-  'espn.com',
-  'theathletic.com',
-  'mlb.com',
-  'nfl.com',
-  'nba.com',
-  'nhl.com',
-  'f1.com',
-  'formula1.com',
-  'pgatour.com',
-  'atptour.com',
-  'wtatennis.com',
-  'premierleague.com',
-  'uefa.com',
-  'mlssoccer.com',
-  'si.com',
-  'cbssports.com',
-  'foxsports.com',
-  'yahoo.com',
-  'bleacherreport.com',
-  'thescore.com',
-  'sportingnews.com',
-  'sportsnet.ca',
-  'tsn.ca',
-  'skysports.com',
-  'bbc.com',
-  'goal.com',
-  'espncricinfo.com',
-  'pro-football-reference.com',
-  'baseball-reference.com',
-  'basketball-reference.com',
-  'fivethirtyeight.com',
-  'rotowire.com',
-  'spotrac.com',
-]
-
-// General news wires and outlets that break sports stories (trades, legal, business).
-const NEWS_SOURCES = [
-  'apnews.com',
-  'reuters.com',
-  'nytimes.com',
-  'washingtonpost.com',
-  'theguardian.com',
-  'bloomberg.com',
-  'usatoday.com',
-]
-
-// Social / community platforms for real-time buzz, insider reports, and reactions.
-const SOCIAL_SOURCES = ['x.com', 'twitter.com', 'reddit.com', 'youtube.com']
-
-// The full universe the model may search across.
-const ALL_SOURCES = [...SPORTS_SOURCES, ...NEWS_SOURCES, ...SOCIAL_SOURCES]
-
-// Mark as dynamic so Next.js doesn't try to cache a streaming response.
 export const dynamic = 'force-dynamic'
 
+// ─── Intent classification ────────────────────────────────────────────────────
+
+type Intent =
+  | 'standings'
+  | 'live_scores'
+  | 'schedule'
+  | 'news'
+  | 'general'
+
+function classifyIntent(q: string): Intent {
+  const lower = q.toLowerCase()
+  if (/\b(standing|rank|table|division|leaderboard|top of|first place|last place|points leader|position)\b/.test(lower))
+    return 'standings'
+  if (/\b(live|right now|happening|current(ly)?|score(s|line)?|final|result|winning|losing|inning|quarter|half|period|overtime)\b/.test(lower))
+    return 'live_scores'
+  if (/\b(next game|schedule|when (do|does|is|are)|upcoming|tip.?off|first pitch|kick.?off|tee time|start time|broadcast|channel|watch|air)\b/.test(lower))
+    return 'schedule'
+  if (/\b(news|trade|injury|injur|report|sign(ed|ing)?|fire[ds]?|hire[ds]?|deal|contract|retire|suspend|suspend|transfer|rumou?r|latest|update|broke?|breaking)\b/.test(lower))
+    return 'news'
+  return 'general'
+}
+
+// ─── Entity extraction ────────────────────────────────────────────────────────
+
+const LEAGUE_ALIASES: Record<string, string[]> = {
+  mlb: ['mlb', 'baseball', 'major league baseball'],
+  nfl: ['nfl', 'football', 'national football league'],
+  ncaaf: ['ncaaf', 'college football', 'cfb'],
+  nba: ['nba', 'basketball', 'national basketball'],
+  ncaam: ['ncaam', 'college basketball', 'march madness'],
+  epl: ['epl', 'premier league', 'english premier', 'bpl'],
+  ucl: ['ucl', 'champions league', 'uefa champions'],
+  laliga: ['laliga', 'la liga', 'spanish league'],
+  mls: ['mls', 'major league soccer'],
+  f1: ['f1', 'formula 1', 'formula one', 'formula1', 'grand prix'],
+  pga: ['pga', 'golf', 'masters', 'open championship', 'us open golf'],
+  atp: ['atp', 'tennis', 'wimbledon', 'us open tennis', 'french open', 'australian open'],
+  wta: ['wta', "women's tennis"],
+  aaa: ['aaa', 'triple-a', 'triple a', 'storm chasers', 'omaha'],
+}
+
+function extractLeague(q: string): string | null {
+  const lower = q.toLowerCase()
+  for (const [id, aliases] of Object.entries(LEAGUE_ALIASES)) {
+    if (aliases.some((a) => lower.includes(a))) return id
+  }
+  return null
+}
+
+function filterGamesByQuery(games: Game[], q: string): Game[] {
+  const lower = q.toLowerCase()
+  const words = lower.split(/\s+/).filter((w) => w.length > 3)
+  return games.filter((g) => {
+    const haystack = [
+      g.name, g.shortName, g.leagueLabel, g.leagueShort,
+      ...g.competitors.map((c) => c.name),
+      ...g.competitors.map((c) => c.shortName),
+    ].join(' ').toLowerCase()
+    return words.some((w) => haystack.includes(w))
+  })
+}
+
+// ─── Context builders ─────────────────────────────────────────────────────────
+
+function formatGame(g: Game): string {
+  const scoreline = g.competitors
+    .map((c) => `${c.shortName}${c.score !== undefined ? ` ${c.score}` : ''}${c.record ? ` (${c.record})` : ''}`)
+    .join(' vs ')
+  const stateLabel =
+    g.state === 'in' ? 'LIVE' : g.state === 'post' ? 'FINAL' : 'Scheduled'
+  const status = g.statusDetail ? ` — ${g.statusDetail}` : ''
+  const vibe = getGameVibe(g)
+  const vibeStr = vibe ? ` [${vibe.label}]` : ''
+  const broadcast = g.broadcasts.length ? ` | TV: ${g.broadcasts.join(', ')}` : ''
+  const venue = g.venue ? ` | Venue: ${g.venue}` : ''
+  const date = g.date ? ` | ${new Date(g.date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })}` : ''
+  return `${g.leagueShort}: ${scoreline}${stateLabel === 'Scheduled' ? '' : ` [${stateLabel}${status}]`}${vibeStr}${date}${broadcast}${venue}`
+}
+
+function buildScoresContext(games: Game[], leagueFilter: string | null, q: string): string {
+  let filtered = leagueFilter ? games.filter((g) => g.leagueId === leagueFilter) : games
+  const queryFiltered = filterGamesByQuery(games, q)
+  if (queryFiltered.length > 0 && queryFiltered.length < filtered.length) {
+    filtered = queryFiltered
+  }
+  const live = filtered.filter((g) => g.state === 'in')
+  const final = filtered.filter((g) => g.state === 'post')
+  const pre = filtered.filter((g) => g.state === 'pre')
+  const sections: string[] = []
+  if (live.length) sections.push(`LIVE GAMES:\n${live.map(formatGame).join('\n')}`)
+  if (final.length) sections.push(`FINAL SCORES:\n${final.map(formatGame).join('\n')}`)
+  if (pre.length) sections.push(`UPCOMING:\n${pre.slice(0, 10).map(formatGame).join('\n')}`)
+  return sections.join('\n\n') || 'No games found for this query today.'
+}
+
+function buildScheduleContext(games: Game[], leagueFilter: string | null, q: string): string {
+  let filtered = leagueFilter ? games.filter((g) => g.leagueId === leagueFilter) : games
+  const queryFiltered = filterGamesByQuery(games, q)
+  if (queryFiltered.length > 0) filtered = queryFiltered
+  const upcoming = filtered
+    .filter((g) => g.state === 'pre')
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(0, 15)
+  const recent = filtered
+    .filter((g) => g.state === 'post')
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    .slice(0, 5)
+  const sections: string[] = []
+  if (upcoming.length) sections.push(`UPCOMING GAMES:\n${upcoming.map(formatGame).join('\n')}`)
+  if (recent.length) sections.push(`RECENT RESULTS:\n${recent.map(formatGame).join('\n')}`)
+  return sections.join('\n\n') || 'No schedule data found for this query.'
+}
+
+function buildNewsContext(news: NewsArticle[], leagueFilter: string | null, q: string): string {
+  let filtered = news
+  if (leagueFilter) {
+    const leagueLabel = leagueFilter.toUpperCase()
+    filtered = news.filter((a) => a.source.toUpperCase().includes(leagueLabel) || leagueLabel.includes(a.source.toUpperCase()))
+  }
+  const words = q.toLowerCase().split(/\s+/).filter((w) => w.length > 3)
+  const scored = filtered.map((a) => {
+    const haystack = `${a.headline} ${a.description ?? ''}`.toLowerCase()
+    const score = words.filter((w) => haystack.includes(w)).length
+    return { article: a, score }
+  })
+  scored.sort((a, b) => b.score - a.score || new Date(b.article.published).getTime() - new Date(a.article.published).getTime())
+  const top = scored.slice(0, 8).map(({ article: a }) => {
+    const age = a.published
+      ? (() => {
+          const diffMs = Date.now() - new Date(a.published).getTime()
+          const mins = Math.round(diffMs / 60_000)
+          return mins < 60 ? `${mins}m ago` : `${Math.round(mins / 60)}h ago`
+        })()
+      : 'recently'
+    return `[${a.source} — ${age}] ${a.headline}${a.description ? `: ${a.description}` : ''}`
+  })
+  return top.length ? top.join('\n') : 'No recent news found for this query.'
+}
+
+function buildMLBStandingsContext(teams: MLBStandingTeam[]): string {
+  const byDivision: Record<string, MLBStandingTeam[]> = {}
+  for (const t of teams) {
+    if (!byDivision[t.division]) byDivision[t.division] = []
+    byDivision[t.division].push(t)
+  }
+  return Object.entries(byDivision)
+    .map(([div, ts]) => {
+      const rows = ts
+        .sort((a, b) => b.wins - a.wins || a.losses - b.losses)
+        .map((t) => `  ${t.shortName} ${t.wins}-${t.losses} (.${t.pct.replace('0.', '').replace('.', '')}) GB: ${t.gb}`)
+        .join('\n')
+      return `${div}:\n${rows}`
+    })
+    .join('\n\n')
+}
+
+function buildF1StandingsContext(drivers: F1Driver[], constructors: F1Constructor[]): string {
+  const driverRows = drivers.slice(0, 10)
+    .map((d) => `  ${d.position}. ${d.name} (${d.teamShort}) — ${d.points} pts, ${d.wins} wins`)
+    .join('\n')
+  const ctorRows = constructors.slice(0, 5)
+    .map((c) => `  ${c.position}. ${c.name} — ${c.points} pts, ${c.wins} wins`)
+    .join('\n')
+  return `F1 DRIVER STANDINGS (top 10):\n${driverRows}\n\nF1 CONSTRUCTOR STANDINGS (top 5):\n${ctorRows}`
+}
+
+function buildPGAContext(players: PGAPlayer[]): string {
+  const rows = players.slice(0, 15)
+    .map((p) => `  ${p.position}. ${p.name} — ${p.score} (Today: ${p.today})`)
+    .join('\n')
+  return `PGA LEADERBOARD (top 15):\n${rows}`
+}
+
+// ─── Route ────────────────────────────────────────────────────────────────────
+
 export async function POST(req: Request) {
+  let question = ''
   try {
-    // AI SDK v7 useChat sends { messages: UIMessage[] } where each message has
-    // a `parts` array, not a plain `content` string. We also still support the
-    // legacy { question: string } shape for direct API calls.
     const body = await req.json() as {
       question?: string
       messages?: Array<{
@@ -81,19 +202,13 @@ export async function POST(req: Request) {
       }>
     }
 
-    // Extract the latest user question from whatever format was sent.
-    let question = body.question ?? ''
+    question = body.question ?? ''
     if (!question && body.messages?.length) {
       const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')
       if (lastUser) {
-        // v7 UIMessage: extract text from parts
         if (lastUser.parts?.length) {
-          question = lastUser.parts
-            .filter((p) => p.type === 'text')
-            .map((p) => p.text ?? '')
-            .join('')
+          question = lastUser.parts.filter((p) => p.type === 'text').map((p) => p.text ?? '').join('')
         }
-        // legacy: plain content string
         if (!question && typeof lastUser.content === 'string') {
           question = lastUser.content
         }
@@ -104,221 +219,113 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Question required' }, { status: 400 })
     }
 
-    const { games } = await getTodaysGames()
+    // Fetch all live data (cached 60s) — same source used by the scores grid.
+    const { games, news, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt } = await getTodaysGames()
 
+    const intent = classifyIntent(question)
+    const leagueFilter = extractLeague(question)
     const now = new Date()
-    const scheduleContext = games
-      .slice(0, 50)
-      .map((g) => {
-        const vibe = getGameVibe(g)
-        const scoreline = g.competitors
-          .map((c) => `${c.shortName}${c.score !== undefined ? ` ${c.score}` : ''}`)
-          .join(g.competitors.length === 2 ? ' vs ' : ', ')
-        return `${g.leagueShort} ${g.date ? new Date(g.date).toLocaleDateString() : 'Today'}: ${g.shortName}, ${g.state === 'in' ? 'LIVE' : g.state === 'post' ? 'FINAL' : 'Pre'}${g.statusDetail ? ` (${g.statusDetail})` : ''}, Score: ${scoreline}${vibe ? `, Vibe: ${vibe.label}` : ''}, Venue: ${g.venue ?? 'TBD'}, Broadcasts: ${g.broadcasts.join(', ') || 'TBD'}`
-      })
-      .join('\n')
+    const dataTimestamp = new Date(fetchedAt).toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+    })
 
-    const tools = {
-      searchSchedule: tool({
-        description: 'Search the live schedule for games matching a team, date range, or league',
-        inputSchema: z.object({
-          query: z.string().describe('Team name, league, or date (e.g. "Red Sox", "NFL", "next Sunday")'),
-        }),
-        execute: async ({ query }) => {
-          const matches = games.filter((g) => {
-            const q = query.toLowerCase()
-            return (
-              g.name.toLowerCase().includes(q) ||
-              g.shortName.toLowerCase().includes(q) ||
-              g.leagueLabel.toLowerCase().includes(q) ||
-              g.competitors.some((c) => c.name.toLowerCase().includes(q))
-            )
-          })
-          if (matches.length === 0) return 'No matching games found in today\'s schedule.'
-          return matches
-            .slice(0, 5)
-            .map(
-              (g) =>
-                `${g.leagueShort}: ${g.shortName} on ${new Date(g.date).toLocaleDateString()}, ${g.state === 'in' ? 'LIVE' : g.state === 'post' ? 'FINAL' : 'Scheduled'} — ${g.statusDetail}`,
-            )
-            .join('\n')
-        },
-      }),
+    // Build the most relevant context slice for this intent.
+    let contextBlock = ''
+    let intentLabel = ''
 
-      findNextGame: tool({
-        description: 'Find the next upcoming game for a specific team',
-        inputSchema: z.object({
-          teamName: z.string().describe('Team name or abbreviation'),
-        }),
-        execute: async ({ teamName }) => {
-          const next = games
-            .filter((g) =>
-              g.competitors.some((c) =>
-                c.name.toLowerCase().includes(teamName.toLowerCase()),
-              ),
-            )
-            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
-          if (!next) return `No upcoming games found for ${teamName}.`
-          const home = next.competitors.find((c) => c.isHome)
-          const away = next.competitors.find((c) => !c.isHome)
-          return `${away?.shortName ?? '?'} @ ${home?.shortName ?? '?'} — ${new Date(next.date).toLocaleDateString()} (${next.leagueShort}). ${next.broadcasts.length > 0 ? `On: ${next.broadcasts.join(', ')}` : 'Broadcast TBD'}. Venue: ${next.venue ?? 'TBD'}.`
-        },
-      }),
-
-      webSearch: tool({
-        description:
-          'Search live sports platforms, major news outlets, and social platforms (X/Twitter, Reddit) for real-time news, stats, injury reports, trades, rumors, standings, and analysis. Use for anything beyond today\'s schedule. Pick a scope: "all" (default, sports + news + social), "sports", "news", "social" (X/Reddit buzz & insider reports), or "open" (unrestricted whole-web search). Use "social" or "open" for breaking rumors and insider chatter.',
-        inputSchema: z.object({
-          query: z.string().describe('Specific sports search query'),
-          scope: z
-            .enum(['all', 'sports', 'news', 'social', 'open'])
-            .optional()
-            .describe(
-              'Where to search: "all" = sports+news+social sites, "sports" = league/sports outlets, "news" = wire services & major papers, "social" = X/Twitter/Reddit for buzz & insider reports, "open" = unrestricted web. Defaults to "all".',
-            ),
-          sites: z
-            .array(z.string())
-            .optional()
-            .describe(
-              `Optionally restrict to specific domains (overrides scope). Available: ${ALL_SOURCES.join(', ')}`,
-            ),
-          recency: z
-            .enum(['day', 'week', 'month', 'any'])
-            .optional()
-            .describe('How recent results must be. Defaults to "week". Use "day" for breaking news, "any" for historical/stats.'),
-        }),
-        execute: async ({ query, scope, sites, recency }) => {
-          // Brave's query string has a hard limit (~2048 chars). site: filters
-          // blow past it quickly, so we keep the OR-list very short (≤6 domains)
-          // and for "all" / "open" scopes we simply run an unrestricted search
-          // (Brave already favors high-authority sports domains without filters).
-          let targetSites: string[] | null
-          if (sites?.length) {
-            // Caller-supplied list: honour it but cap at 5 to stay under the limit.
-            targetSites = sites.slice(0, 5)
-          } else {
-            switch (scope) {
-              case 'sports':
-                // Pick the 6 highest-signal sports domains only.
-                targetSites = ['espn.com', 'theathletic.com', 'cbssports.com', 'bleacherreport.com', 'sportingnews.com', 'si.com']
-                break
-              case 'news':
-                targetSites = ['apnews.com', 'reuters.com', 'nytimes.com', 'washingtonpost.com', 'theguardian.com', 'usatoday.com']
-                break
-              case 'social':
-                // X (twitter.com) and Reddit — short list, no length issue.
-                targetSites = ['x.com', 'twitter.com', 'reddit.com']
-                break
-              case 'open':
-              case 'all':
-              default:
-                // No site filter — Brave returns the best results across the web
-                // which naturally surfaces ESPN, The Athletic, wire services, X, etc.
-                targetSites = null
-                break
-            }
-          }
-
-          // Build a concise site filter (≤6 domains keeps the URL well under 500 chars).
-          const siteFilter = targetSites && targetSites.length > 0
-            ? ` (${targetSites.map((s) => `site:${s}`).join(' OR ')})`
-            : ''
-          const searchQuery = `${query}${siteFilter}`
-
-          const freshnessMap: Record<string, string> = { day: 'pd', week: 'pw', month: 'pm' }
-          const freshnessParam =
-            recency && recency !== 'any' && freshnessMap[recency]
-              ? `&freshness=${freshnessMap[recency]}`
-              : recency === 'any'
-                ? ''
-                : '&freshness=pw'
-
-          const scopeLabel = targetSites ? targetSites.join(', ') : 'the open web'
-
-          try {
-            const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
-            const res = await fetch(searchUrl, {
-              headers: {
-                'Accept': 'application/json',
-                'Accept-Encoding': 'gzip',
-                'X-Subscription-Token': process.env.BRAVE_SEARCH_API_KEY ?? '',
-              },
-              next: { revalidate: 60 },
-            })
-
-            if (!res.ok) {
-              // Graceful fallback: tell the model what sources to reference.
-              return `Web search unavailable. For "${query}", I'd recommend checking: ${scopeLabel} directly. Today's date: ${now.toLocaleDateString()}.`
-            }
-
-            const data = await res.json() as {
-              web?: {
-                results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
-              }
-            }
-
-            const results = data.web?.results ?? []
-            if (results.length === 0) {
-              return `No results found for "${query}" across ${scopeLabel}.`
-            }
-
-            return results
-              .slice(0, 6)
-              .map(
-                (r) =>
-                  `[${r.profile?.name ?? r.title ?? 'Source'}] ${r.title ?? ''}: ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
-              )
-              .join('\n\n')
-          } catch {
-            return `Search unavailable. Check ESPN, The Athletic, or X for the latest on "${query}".`
-          }
-        },
-      }),
+    switch (intent) {
+      case 'standings': {
+        if (leagueFilter === 'mlb') {
+          contextBlock = buildMLBStandingsContext(mlbStandings)
+          intentLabel = 'MLB standings'
+        } else if (leagueFilter === 'f1') {
+          contextBlock = buildF1StandingsContext(f1Standings.drivers, f1Standings.constructors)
+          intentLabel = 'F1 standings'
+        } else if (leagueFilter === 'pga') {
+          contextBlock = buildPGAContext(pgaLeaderboard)
+          intentLabel = 'PGA leaderboard'
+        } else {
+          // Return whichever standings data is available — prefer MLB/F1/PGA based on mention.
+          const parts: string[] = []
+          if (mlbStandings.length) parts.push(buildMLBStandingsContext(mlbStandings))
+          if (f1Standings.drivers.length) parts.push(buildF1StandingsContext(f1Standings.drivers, f1Standings.constructors))
+          if (pgaLeaderboard.length) parts.push(buildPGAContext(pgaLeaderboard))
+          contextBlock = parts.join('\n\n')
+          intentLabel = 'standings'
+        }
+        break
+      }
+      case 'live_scores': {
+        contextBlock = buildScoresContext(games, leagueFilter, question)
+        intentLabel = 'live scores and recent results'
+        break
+      }
+      case 'schedule': {
+        contextBlock = buildScheduleContext(games, leagueFilter, question)
+        intentLabel = 'upcoming schedule'
+        break
+      }
+      case 'news': {
+        contextBlock = buildNewsContext(news, leagueFilter, question)
+        intentLabel = 'latest news'
+        // Also attach relevant schedule data so we can mention next games.
+        const scheduleNote = buildScheduleContext(games, leagueFilter, question)
+        if (scheduleNote && scheduleNote !== 'No schedule data found for this query.') {
+          contextBlock += `\n\nRELEVANT SCHEDULE:\n${scheduleNote}`
+        }
+        break
+      }
+      default: {
+        // General: provide a broad snapshot — today's live games + headlines + top standings.
+        const liveGames = games.filter((g) => g.state === 'in').slice(0, 10).map(formatGame).join('\n')
+        const recentFinals = games.filter((g) => g.state === 'post').slice(0, 8).map(formatGame).join('\n')
+        const topNews = buildNewsContext(news, leagueFilter, question)
+        const parts: string[] = []
+        if (liveGames) parts.push(`LIVE RIGHT NOW:\n${liveGames}`)
+        if (recentFinals) parts.push(`RECENT FINALS:\n${recentFinals}`)
+        parts.push(`LATEST HEADLINES:\n${topNews}`)
+        contextBlock = parts.join('\n\n')
+        intentLabel = 'today\'s sports snapshot'
+        break
+      }
     }
+
+    const systemPrompt = `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
+
+DATA AS OF: ${dataTimestamp} (today is ${now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })})
+
+INTENT DETECTED: ${intentLabel}
+
+LIVE DATA (answer ONLY from this — do not cite external sites or ask the user to check elsewhere):
+${contextBlock}
+
+RULES:
+- Answer directly and concisely from the data above. Do not apologize or redirect to external websites.
+- If the data above does not cover a specific player/team detail, say what you DO have (e.g. the next scheduled game, the most recent score) and note that finer detail isn't in today's live feed.
+- Never surface internal error text like "technical limitation" or "data unavailable" — if data is sparse, just give what you have.
+- Use **bold** for team names, player names, and key numbers.
+- Use bullet points for lists of 3 or more items.
+- State that data is current as of ${dataTimestamp}.
+- Be concise — no fluff, no filler sentences.`
 
     const result = streamText({
       model: MODEL,
-      tools,
-      toolChoice: 'auto',
-      stopWhen: stepCountIs(8),
-      system: `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
-
-You have access to:
-1. Live game schedules across MLB, NFL, NCAAF, EPL, UCL, La Liga, MLS, F1, PGA, ATP, WTA, NBA, NCAAM (searchSchedule, findNextGame tools)
-2. Real-time web search (webSearch tool) spanning:
-   - Live sports platforms: ESPN, The Athletic, league sites (MLB/NFL/NBA/NHL/F1/PGA/ATP/WTA/Premier League/UEFA/MLS), broadcasters (Fox Sports, Sky Sports, TSN, Sportsnet, BBC, Yahoo, The Score), and reference/analytics sites (Pro/Baseball/Basketball Reference, FiveThirtyEight, RotoWire, Spotrac)
-   - Major news outlets: AP, Reuters, NYT, Washington Post, The Guardian, Bloomberg, USA Today
-   - Social platforms: X/Twitter and Reddit for real-time buzz, insider reports, and fan reaction
-
-Rules:
-- Be direct, fast, and specific. No fluff.
-- For schedule/score questions → use searchSchedule or findNextGame.
-- For stats, trades, injuries, news, standings, analysis, or social buzz → use webSearch. Choose the scope deliberately: "sports" for official stats/news, "news" for business/legal/breaking wire stories, "social" (X/Twitter, Reddit) for insider reports, rumors, and reactions, "all" to cast the widest net, and "open" only when the topic is niche and none of the curated sources fit.
-- For breaking news and live rumors, set recency to "day" and prefer the "social" or "all" scope. For historical stats, set recency to "any".
-- Cite your source (site name, or handle/platform for X/Reddit) when using webSearch results.
-- Use **bold** for team names, player names, and key numbers. Use bullet points for lists of 3+ items.
-- Today's date: ${now.toLocaleDateString()}.
-
-When summarizing a live or completed game (or previewing an upcoming one), lead with the ONE descriptor that best captures its character, then back it with the decisive number(s). Draw from this vocabulary and apply it honestly — only use a label the data supports:
-- Baseball: "pitcher's duel" (both lineups shut down), "slugfest" (runs pouring in), "bullpen game" (no traditional starter going deep), "enticing pitching matchup" / "ace duel" (two aces on the mound for a preview), "EXTRA INNINGS" (tied after 9), "bats alive", "nail-biter".
-- All sports: "shootout" (points/goals flying), "nail-biter" (razor-thin margin), "instant classic" (dramatic, went to OT/extras and stayed close), "statement game" (a favorite dominating), "defensive masterclass" (elite low-scoring effort), "must-win" (elimination or standings stakes), "revenge game" (rematch after a prior loss), "rivalry match" (historic rivalry), "upset alert" (an underdog leading/beating a favorite).
-- The "Vibe" tag in the schedule context below is the deterministic read of each game — treat it as a strong hint, and enrich it with the stakes (records, standings, elimination, rivalry, revenge angle) when you know them.
-
-Current live schedule context:
-${scheduleContext}`,
+      system: systemPrompt,
       prompt: question,
     })
 
-    // createUIMessageStreamResponse is the correct v7 standalone API.
-    // result.toUIMessageStreamResponse() is deprecated in AI SDK v7.
     return createUIMessageStreamResponse({
       stream: result.toUIMessageStream(),
     })
   } catch (error) {
-    console.error('[Ask Slate] Error:', error)
-    return Response.json(
-      { error: 'Failed to answer question' },
-      { status: 500 },
-    )
+    // Log the real error server-side only — never expose it to the user.
+    console.error('[ask-slate] Error handling question:', JSON.stringify({ question }), error)
+    return createUIMessageStreamResponse({
+      stream: streamText({
+        model: MODEL,
+        system: 'You are a friendly sports assistant. Something went wrong fetching live data.',
+        prompt: 'Apologize briefly (one sentence) and say live sports data is temporarily unavailable — the user should try again in a moment.',
+      }).toUIMessageStream(),
+    })
   }
 }
