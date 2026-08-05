@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { Activity, BarChart3, CalendarDays, Radio, RefreshCw, Star, Trophy } from "lucide-react"
+import { Activity, Star } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
 import { AuthStatus } from "@/components/auth-status"
 import { GameCard } from "@/components/game-card"
@@ -192,12 +192,6 @@ export function SportsGuide({
               {liveCount} Live
             </span>
           )}
-          <span className="flex items-center gap-1.5 text-muted-foreground">
-            <RefreshCw className="h-3 w-3 shrink-0" aria-hidden="true" />
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.18em]">
-              {updated || "—"}
-            </span>
-          </span>
           <AuthStatus />
         </div>
       </div>
@@ -223,14 +217,6 @@ export function SportsGuide({
         </div>
       </header>
 
-      {/* Compact signal strip */}
-      <div className="mb-6 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <SignalTile icon={<Radio className="h-3.5 w-3.5" />} label="Live now" value={String(liveCount)} tone={liveCount > 0 ? "live" : "neutral"} />
-        <SignalTile icon={<CalendarDays className="h-3.5 w-3.5" />} label="On deck" value={String(games.length)} />
-        <SignalTile icon={<Trophy className="h-3.5 w-3.5" />} label="Leagues" value={String(activeLeagues.length)} />
-        <SignalTile icon={<BarChart3 className="h-3.5 w-3.5" />} label="Updated" value={updated || "—"} />
-      </div>
-
       {/* Filter nav */}
       <nav
         aria-label="Filter by league"
@@ -255,123 +241,110 @@ export function SportsGuide({
         ))}
       </nav>
 
-      {/* Hero row — Ask Ball Knowledge + Top News */}
-      {filter === "all" ? (
-        <div className="mb-10 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+      {/* Two-column layout: sticky Ask panel left, scrollable content right */}
+      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+
+        {/* LEFT — sticky Ask Ball Knowledge */}
+        <div className="w-full lg:sticky lg:top-[105px] lg:w-[380px] lg:shrink-0 xl:w-[420px]">
           <AskSlate />
-          <SportsNews articles={news} />
         </div>
-      ) : null}
 
-      {filter === "all" ? (
-        <SportSpotlight
-          games={games}
-          priority={CATEGORY_ORDER}
-          onFilterLeague={(category) => setFilter(`cat:${category}`)}
-        />
-      ) : null}
+        {/* RIGHT — scrollable content feed */}
+        <div className="min-w-0 flex-1">
 
-      {filter === "all" && mostWatchedGames.length > 0 ? (
-        <section className="mb-10">
-          <SectionLabel>Most Watched</SectionLabel>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {mostWatchedGames.map((g) => (
-              <GameCard key={`mw-${g.id}`} game={g} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+          {/* Biggest News — first thing visible */}
+          {filter === "all" ? <SportsNews articles={news} /> : null}
 
-      {filter === "all" && favoriteGames.length > 0 ? (
-        <section className="mb-10">
-          <SectionLabel icon={<Star className="h-3.5 w-3.5 fill-primary text-primary" />}>
-            Favorites
-          </SectionLabel>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {favoriteGames.map((g) => (
-              <GameCard key={`fav-${g.id}`} game={g} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+          {filter === "all" ? (
+            <div className="mt-8">
+              <SportSpotlight
+                games={games}
+                priority={CATEGORY_ORDER}
+                onFilterLeague={(category) => setFilter(`cat:${category}`)}
+              />
+            </div>
+          ) : null}
 
-      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
-
-      {filter === "all" ? (
-        <>
-          <F1DriverStandings drivers={f1Standings.drivers} />
-          <F1ConstructorStandings constructors={f1Standings.constructors} />
-        </>
-      ) : null}
-
-      {filter === "all" ? <PGALeaderboard players={pgaLeaderboard} /> : null}
-      {filter === "all" ? <StandingsLeaderboard standings={mlbStandings} /> : null}
-      {filter === "all" ? <KeyDates /> : null}
-
-      {grouped.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
-          <p className="text-sm font-bold text-foreground">No games right now</p>
-          <p className="mt-1 text-xs text-muted-foreground">Refreshes automatically every 60s.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-10">
-          {grouped.map(({ category, status, leagues }) => (
-            <section key={category} className={status === "done" || status === "scheduled" ? "opacity-70" : ""}>
-              <div className="mb-4 flex items-center gap-2.5">
-                <span
-                  className={`h-4 w-1 rounded-full ${status === "live" ? "bg-destructive" : "bg-primary"}`}
-                  aria-hidden="true"
-                />
-                <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-foreground/70">
-                  {category}
-                </h2>
-                <CategoryBadge status={status} />
-                <span className="h-px flex-1 bg-border" aria-hidden="true" />
-              </div>
-              <div className="flex flex-col gap-6">
-                {leagues.map(({ league, games: leagueGames }) => (
-                  <div key={league.id}>
-                    <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
-                      {league.label}
-                      <span className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-muted-foreground">
-                        {leagueGames.length}
-                      </span>
-                    </h3>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {leagueGames.map((g) => (
-                        <GameCard key={g.id} game={g} />
-                      ))}
-                    </div>
-                  </div>
+          {filter === "all" && mostWatchedGames.length > 0 ? (
+            <section className="mb-10">
+              <SectionLabel>Most Watched</SectionLabel>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {mostWatchedGames.map((g) => (
+                  <GameCard key={`mw-${g.id}`} game={g} />
                 ))}
               </div>
             </section>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
+          ) : null}
 
-function SignalTile({
-  icon,
-  label,
-  value,
-  tone = "neutral",
-}: {
-  icon: React.ReactNode
-  label: string
-  value: string
-  tone?: "live" | "neutral"
-}) {
-  return (
-    <div className="group flex min-w-0 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 shadow-[0_1px_0_rgba(15,23,42,0.03)] transition-colors hover:border-primary/30">
-      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg ${tone === "live" ? "bg-destructive/10 text-destructive" : "bg-primary/8 text-primary"}`} aria-hidden="true">
-        {icon}
-      </span>
-      <div className="min-w-0">
-        <p className="truncate font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{label}</p>
-        <p className="truncate text-sm font-black tabular-nums text-foreground">{value}</p>
+          {filter === "all" && favoriteGames.length > 0 ? (
+            <section className="mb-10">
+              <SectionLabel icon={<Star className="h-3.5 w-3.5 fill-primary text-primary" />}>
+                Favorites
+              </SectionLabel>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {favoriteGames.map((g) => (
+                  <GameCard key={`fav-${g.id}`} game={g} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
+
+          {filter === "all" ? (
+            <>
+              <F1DriverStandings drivers={f1Standings.drivers} />
+              <F1ConstructorStandings constructors={f1Standings.constructors} />
+            </>
+          ) : null}
+
+          {filter === "all" ? <PGALeaderboard players={pgaLeaderboard} /> : null}
+          {filter === "all" ? <StandingsLeaderboard standings={mlbStandings} /> : null}
+          {filter === "all" ? <KeyDates /> : null}
+
+          {grouped.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
+              <p className="text-sm font-bold text-foreground">No games right now</p>
+              <p className="mt-1 text-xs text-muted-foreground">Refreshes automatically every 60s.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-10">
+              {grouped.map(({ category, status, leagues }) => (
+                <section key={category} className={status === "done" || status === "scheduled" ? "opacity-70" : ""}>
+                  <div className="mb-4 flex items-center gap-2.5">
+                    <span
+                      className={`h-4 w-1 rounded-full ${status === "live" ? "bg-destructive" : "bg-primary"}`}
+                      aria-hidden="true"
+                    />
+                    <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-foreground/70">
+                      {category}
+                    </h2>
+                    <CategoryBadge status={status} />
+                    <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                  </div>
+                  <div className="flex flex-col gap-6">
+                    {leagues.map(({ league, games: leagueGames }) => (
+                      <div key={league.id}>
+                        <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
+                          {league.label}
+                          <span className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-muted-foreground">
+                            {leagueGames.length}
+                          </span>
+                        </h3>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          {leagueGames.map((g) => (
+                            <GameCard key={g.id} game={g} />
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
+        </div>
       </div>
     </div>
   )
