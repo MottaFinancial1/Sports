@@ -1,16 +1,16 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Inter, Geist_Mono } from 'next/font/google'
 import { GeographicBackdrop } from '@/components/geographic-backdrop'
 import './globals.css'
 
-const geistSans = Geist({ subsets: ['latin'], variable: '--font-geist-sans' })
+const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const geistMono = Geist_Mono({ subsets: ['latin'], variable: '--font-geist-mono' })
 
 export const metadata: Metadata = {
-  title: 'Ball Knowledge — Live Scores & How to Watch',
+  title: 'Ball Knowledge — Live Scores & Sports Intelligence',
   description:
-    "Your personalized sports intelligence hub — live scores, standout performances, and the next events worth your attention across baseball, football, soccer, F1, golf, tennis, and basketball.",
+    "Your sports intelligence platform — live scores, standings, AI-powered answers, and the biggest news across baseball, football, soccer, F1, golf, tennis, and basketball.",
   generator: 'v0.app',
   icons: {
     icon: [
@@ -32,8 +32,8 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  colorScheme: 'dark',
-  themeColor: '#080812',
+  colorScheme: 'light',
+  themeColor: '#f9fafb',
 }
 
 export default function RootLayout({
@@ -42,7 +42,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`bg-background ${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" className={`bg-background ${inter.variable} ${geistMono.variable}`}>
       <body className="font-sans antialiased">
         <GeographicBackdrop />
         {children}

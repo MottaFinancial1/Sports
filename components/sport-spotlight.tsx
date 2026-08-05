@@ -4,8 +4,6 @@ import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, Zap } from "lucide-react"
 import { isFavoriteGame, type Game, type LeagueCategory } from "@/lib/espn"
 
-// Category activity used to tailor the homepage. "live" beats "soon"
-// (starting within 48h) beats "scheduled" beats "done".
 export type CategoryStatus = "live" | "soon" | "scheduled" | "done"
 
 const SOON_WINDOW_MS = 48 * 60 * 60 * 1000
@@ -39,7 +37,6 @@ export function orderCategories(
 function pickFeaturedGame(games: Game[], now: number): Game | undefined {
   const live = games.filter((g) => g.state === "in")
   if (live.length > 0) {
-    // Prefer a favorite team's live game.
     return live.find(isFavoriteGame) ?? live[0]
   }
   return games
@@ -53,10 +50,7 @@ function Countdown({ iso }: { iso: string }) {
   useEffect(() => {
     const compute = () => {
       const ms = new Date(iso).getTime() - Date.now()
-      if (ms <= 0) {
-        setLabel("Starting now")
-        return
-      }
+      if (ms <= 0) { setLabel("Starting now"); return }
       const d = Math.floor(ms / 86_400_000)
       const h = Math.floor((ms % 86_400_000) / 3_600_000)
       const m = Math.floor((ms % 3_600_000) / 60_000)
@@ -91,10 +85,15 @@ function SpotlightCard({
 
   const inner = (
     <article
-      className={`group relative flex h-full flex-col gap-3 overflow-hidden rounded-lg border p-5 transition-all hover:shadow-[0_0_28px_-8px_var(--color-primary)] ${
-        isLive ? "border-destructive/50 bg-destructive/5" : "border-primary/40 bg-primary/5"
+      className={`group relative flex h-full flex-col gap-4 overflow-hidden rounded-xl border p-5 transition-all hover:shadow-md ${
+        isLive
+          ? "border-destructive/30 bg-destructive/4"
+          : "border-primary/25 bg-primary/4"
       }`}
     >
+      {/* Top accent */}
+      <div className={`absolute inset-x-0 top-0 h-0.5 rounded-t-xl ${isLive ? "bg-destructive" : "bg-primary"}`} />
+
       <div className="flex items-center justify-between gap-2">
         <span
           className={`font-mono text-[11px] font-extrabold uppercase tracking-widest ${
@@ -104,7 +103,7 @@ function SpotlightCard({
           {category}
         </span>
         {isLive ? (
-          <span className="flex items-center gap-1.5 font-mono text-[11px] font-bold uppercase tracking-wider text-destructive">
+          <span className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-destructive">
             <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-destructive" aria-hidden="true" />
             {liveCount > 1 ? `${liveCount} live` : "Live"}
           </span>
@@ -121,7 +120,7 @@ function SpotlightCard({
           {featured.venue ? <p className="text-xs text-muted-foreground">{featured.venue}</p> : null}
         </div>
       ) : (
-        <div className="flex flex-1 flex-col justify-center gap-2.5">
+        <div className="flex flex-1 flex-col justify-center gap-3">
           {featured.competitors.map((c, i) => (
             <div key={`${featured.id}-sp-${i}`} className="flex items-center justify-between gap-3">
               <div className="flex min-w-0 items-center gap-2.5">
@@ -129,18 +128,18 @@ function SpotlightCard({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={c.logo || "/placeholder.svg"} alt="" className="h-8 w-8 shrink-0 object-contain" />
                 ) : (
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-muted-foreground">
                     {c.shortName.slice(0, 2).toUpperCase()}
                   </span>
                 )}
-                <span className={`truncate text-base ${c.winner ? "font-bold" : "font-semibold"} text-foreground`}>
+                <span className={`truncate text-base ${c.winner ? "font-bold text-foreground" : "font-semibold text-foreground/80"}`}>
                   {c.name}
                 </span>
               </div>
               {featured.state !== "pre" && c.score !== undefined ? (
                 <span
                   className={`shrink-0 font-mono text-2xl font-extrabold tabular-nums leading-none ${
-                    c.winner ? "text-primary" : "text-foreground"
+                    c.winner ? "text-primary" : "text-foreground/60"
                   }`}
                 >
                   {c.score}
@@ -153,7 +152,9 @@ function SpotlightCard({
 
       <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
         <span className="truncate font-mono text-[11px] text-muted-foreground">
-          {isLive ? featured.statusDetail : featured.broadcasts.slice(0, 2).join(" · ") || "Broadcast TBD"}
+          {isLive
+            ? featured.statusDetail
+            : featured.broadcasts.slice(0, 2).join(" · ") || "Broadcast TBD"}
         </span>
         <button
           type="button"
@@ -178,7 +179,7 @@ function SpotlightCard({
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`${featured.shortName || featured.name} — open live stats`}
-        className="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        className="rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         {inner}
       </a>
@@ -212,7 +213,6 @@ export function SportSpotlight({
       priority,
       now,
     )
-    // Feature the top two sports that are live or starting soon.
     return ordered
       .filter((c) => c.status === "live" || c.status === "soon")
       .slice(0, 2)
@@ -223,8 +223,8 @@ export function SportSpotlight({
 
   return (
     <section className="mb-10">
-      <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
-        <Zap className="h-3.5 w-3.5 fill-primary" aria-hidden="true" />
+      <h2 className="mb-4 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+        <Zap className="h-3.5 w-3.5 fill-primary text-primary" aria-hidden="true" />
         Your Sports Right Now
         <span className="h-px flex-1 bg-border" aria-hidden="true" />
       </h2>
