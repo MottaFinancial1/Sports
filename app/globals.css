@@ -152,9 +152,19 @@
   background-size: 24px 24px;
 }
 
+/* Horizontal news ticker */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .live-dot,
   .scan-line {
     animation: none;
+  }
+  /* Freeze the ticker; user can still scroll it manually */
+  [style*="ticker-scroll"] {
+    animation-play-state: paused !important;
   }
 }

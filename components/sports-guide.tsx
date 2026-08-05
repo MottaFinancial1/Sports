@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
 import { Activity, Star } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
+import { LiveCrawl } from "@/components/live-crawl"
 import { AuthStatus } from "@/components/auth-status"
 import { GameCard } from "@/components/game-card"
 import { KeyDates } from "@/components/key-dates"
@@ -241,11 +242,14 @@ export function SportsGuide({
         ))}
       </nav>
 
+      {/* Live scores / upcoming crawl */}
+      <LiveCrawl games={games} />
+
       {/* Two-column layout: sticky Ask panel left, scrollable content right */}
-      <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
+      <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
 
         {/* LEFT — sticky Ask Ball Knowledge */}
-        <div className="w-full lg:sticky lg:top-[105px] lg:w-[380px] lg:shrink-0 xl:w-[420px]">
+        <div className="w-full lg:sticky lg:top-[100px] lg:w-[380px] lg:shrink-0 xl:w-[420px]">
           <AskSlate />
         </div>
 
