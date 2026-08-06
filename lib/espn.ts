@@ -216,17 +216,37 @@ function mapCompetitor(c: EspnCompetitor): Competitor {
   }
 }
 
-async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard`
+/** Fetch with an AbortController timeout so a slow upstream never hangs the
+ *  Vercel serverless function past its execution limit. */
+async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
   try {
-    const res = await fetch(url, {
-      // no-store ensures production always fetches the live slate rather than
-      // serving a stale ISR-cached response that may have 0 games.
-      // The /api/games route itself is force-dynamic and carries its own
-      // Cache-Control header to allow CDN revalidation downstream.
+    return await fetch(url, {
       cache: "no-store",
+      signal: controller.signal,
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Today's date as YYYYMMDD in the local (server) timezone — used to scope
+ *  the ESPN MLB scoreboard explicitly so it never returns yesterday's slate. */
+function todayESPN(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}${m}${day}`
+}
+
+async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
+  const dateParam = league.id === "mlb" ? `?dates=${todayESPN()}` : ""
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard${dateParam}`
+  try {
+    const res = await fetchWithTimeout(url)
     if (!res.ok) return []
     const data = (await res.json()) as EspnResponse
     const isFootball = league.id === "nfl" || league.id === "ncaaf"
@@ -368,10 +388,7 @@ async function fetchStormChasers(): Promise<Game[]> {
   // to the new day automatically, same as the ESPN scoreboards.
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STORM_CHASERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
   try {
-    const res = await fetch(url, {
-      cache: "no-store",
-      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
-    })
+    const res = await fetchWithTimeout(url)
     if (!res.ok) return []
     const data = (await res.json()) as { dates?: { games?: StatsApiGame[] }[] }
     const games: Game[] = []
