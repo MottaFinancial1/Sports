@@ -97,6 +97,11 @@ export function SportsGuide({
   }, [fetchedAt])
 
   const liveCount = useMemo(() => games.filter((g) => g.state === "in").length, [games])
+  const todayCount = useMemo(() => games.filter((g) => g.isToday).length, [games])
+  const liveGames = useMemo(
+    () => games.filter((g) => g.state === "in").sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [games],
+  )
 
   const activeLeagues = useMemo(() => {
     const ids = new Set(games.map((g) => g.leagueId))
@@ -129,6 +134,7 @@ export function SportsGuide({
   const filtered = useMemo(() => {
     if (filter === "all") return games
     if (filter === "live") return games.filter((g) => g.state === "in")
+    if (filter === "today") return games.filter((g) => g.isToday)
     if (filter === "favorites") return games.filter(isFavoriteGame)
     if (filter.startsWith("cat:")) return games.filter((g) => g.category === filter.slice(4))
     return games.filter((g) => g.leagueId === filter)
@@ -147,6 +153,10 @@ export function SportsGuide({
     }
     for (const arr of byLeague.values()) {
       arr.sort((a, b) => {
+        // Live first, then today's games, then future
+        const statePriority = (g: Game) => (g.state === "in" ? 0 : g.isToday ? 1 : 2)
+        const stateDiff = statePriority(a) - statePriority(b)
+        if (stateDiff !== 0) return stateDiff
         const viewDiff =
           gameViewScore(b.competitors.map((c) => c.name), teamViews) -
           gameViewScore(a.competitors.map((c) => c.name), teamViews)
@@ -233,6 +243,9 @@ export function SportsGuide({
           {liveCount > 0 && <span className="live-dot mr-1 inline-block h-1.5 w-1.5 rounded-full bg-destructive" />}
           Live ({liveCount})
         </FilterChip>
+        <FilterChip active={filter === "today"} onClick={() => setFilter("today")}>
+          Today ({todayCount})
+        </FilterChip>
         {favoriteGames.length > 0 ? (
           <FilterChip active={filter === "favorites"} onClick={() => setFilter("favorites")}>
             Favorites ({favoriteGames.length})
@@ -258,6 +271,25 @@ export function SportsGuide({
 
         {/* RIGHT — scrollable content feed */}
         <div className="min-w-0 flex-1">
+
+          {/* Live Now — highest priority: surfaced before everything else */}
+          {(filter === "all" || filter === "live" || filter === "today") && liveGames.length > 0 ? (
+            <section className="mb-10">
+              <h2 className="mb-4 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                <span className="live-dot inline-block h-2 w-2 rounded-full bg-destructive" aria-hidden="true" />
+                <span className="text-destructive">Live Now</span>
+                <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-extrabold tabular-nums text-destructive">
+                  {liveGames.length}
+                </span>
+                <span className="h-px flex-1 bg-border" aria-hidden="true" />
+              </h2>
+              <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${liveGames.length >= 6 ? "lg:grid-cols-3" : ""}`}>
+                {liveGames.map((g) => (
+                  <GameCard key={`live-${g.id}`} game={g} />
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {/* Biggest News — first thing visible */}
           {filter === "all" ? <SportsNews articles={news} /> : null}
@@ -335,14 +367,32 @@ export function SportsGuide({
                         <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
                           {league.label}
                           <span className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-muted-foreground">
-                            {leagueGames.length}
+                            {leagueGames.filter((g) => !((filter === "all" || filter === "today") && liveGames.length > 0 && g.state === "in")).length}
                           </span>
+                          {leagueGames.some((g) => g.state === "in") && (filter === "all" || filter === "today") ? (
+                            <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-destructive">
+                              {leagueGames.filter((g) => g.state === "in").length} live ↑
+                            </span>
+                          ) : null}
                         </h3>
-                        <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${leagueGames.length >= 6 ? "lg:grid-cols-3" : ""}`}>
-                          {leagueGames.map((g) => (
-                            <GameCard key={g.id} game={g} />
-                          ))}
-                        </div>
+                        {(() => {
+                          // In all/today view, live games are already shown in the "Live Now"
+                          // section above — exclude them here to avoid duplication.
+                          const showingLiveNow = (filter === "all" || filter === "today") && liveGames.length > 0
+                          const displayGames = showingLiveNow
+                            ? leagueGames.filter((g) => g.state !== "in")
+                            : leagueGames
+                          if (displayGames.length === 0) return null
+                          return (
+                            <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${displayGames.length >= 6 ? "lg:grid-cols-3" : ""}`}>
+                              {displayGames.map((g) => (
+                                <div key={g.id} className={!g.isToday && g.state === "pre" ? "opacity-50" : ""}>
+                                  <GameCard game={g} />
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        })()}
                       </div>
                     ))}
                   </div>

@@ -95,14 +95,21 @@ function buildItems(games: Game[]): CrawlItem[] {
       }
     })
 
-  // Upcoming — within next 7 days, sport-specific rules already applied above
+  // Upcoming — today's games first, then within next 7 days
   const upcoming = filtered
     .filter((g) => {
       if (g.state !== "pre") return false
       const t = new Date(g.date).getTime()
       return t >= now && t <= sevenDays
     })
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .sort((a, b) => {
+      // Today's games always come before future games in the ticker
+      const aIsToday = a.isToday ?? false
+      const bIsToday = b.isToday ?? false
+      if (aIsToday && !bIsToday) return -1
+      if (!aIsToday && bIsToday) return 1
+      return new Date(a.date).getTime() - new Date(b.date).getTime()
+    })
     .slice(0, 14)
     .map<CrawlItem>((g) => {
       const away = g.competitors.find((c) => !c.isHome) ?? g.competitors[0]
