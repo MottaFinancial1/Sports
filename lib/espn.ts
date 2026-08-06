@@ -23,9 +23,10 @@ export interface LeagueConfig {
 }
 
 export const LEAGUES: LeagueConfig[] = [
-  { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "baseball/mlb" },
-  // Triple-A (Omaha Storm Chasers) comes from the MLB Stats API, not ESPN —
-  // path is unused; getTodaysGames routes this id to fetchStormChasers().
+  // MLB comes from the MLB Stats API (statsapi.mlb.com), not ESPN —
+  // ESPN blocks Vercel IPs. getTodaysGames routes "mlb" to fetchMLBGames().
+  { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "" },
+  // Triple-A (Omaha Storm Chasers) — also MLB Stats API.
   { id: "aaa", label: "Triple-A", shortLabel: "AAA", category: "Baseball", path: "" },
   { id: "nfl", label: "NFL", shortLabel: "NFL", category: "Football", path: "football/nfl" },
   {
@@ -423,6 +424,56 @@ async function fetchStormChasers(): Promise<Game[]> {
           broadcasts,
           venue: g.venue?.name,
           link: `https://www.milb.com/gameday/${g.gamePk}`,
+        })
+      }
+    }
+    return games
+  } catch {
+    return []
+  }
+}
+
+// ---------- MLB (Major League) via the MLB Stats API ----------
+
+async function fetchMLBGames(): Promise<Game[]> {
+  const today = todayESPN()
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today.slice(0,4)}-${today.slice(4,6)}-${today.slice(6,8)}&hydrate=team,linescore,broadcasts(all),probablePitcher`
+  try {
+    const res = await fetchWithTimeout(url)
+    if (!res.ok) return []
+    const data = (await res.json()) as { dates?: { games?: StatsApiGame[] }[] }
+    const games: Game[] = []
+    for (const date of data.dates ?? []) {
+      for (const g of date.games ?? []) {
+        const state = mapStatsApiState(g.status?.abstractGameState)
+        const awayScore = g.teams?.away?.score
+        const homeScore = g.teams?.home?.score
+        const awayWon = state === "post" && awayScore !== undefined && homeScore !== undefined && awayScore > homeScore
+        const homeWon = state === "post" && awayScore !== undefined && homeScore !== undefined && homeScore > awayScore
+        const away = mapStatsApiSide(g.teams?.away, false, state === "post" ? awayWon : undefined)
+        const home = mapStatsApiSide(g.teams?.home, true, state === "post" ? homeWon : undefined)
+        const statusDetail =
+          state === "in" && g.linescore?.currentInningOrdinal
+            ? `${g.linescore.inningState ?? ""} ${g.linescore.currentInningOrdinal}`.trim()
+            : (g.status?.detailedState ?? "")
+        const broadcasts = Array.from(
+          new Set((g.broadcasts ?? []).map((b) => b.name ?? b.callSign).filter((n): n is string => Boolean(n))),
+        )
+        games.push({
+          id: `mlb-${g.gamePk}`,
+          leagueId: "mlb",
+          leagueLabel: "MLB",
+          leagueShort: "MLB",
+          category: "Baseball",
+          name: `${away.name} at ${home.name}`,
+          shortName: `${away.shortName} @ ${home.shortName}`,
+          date: g.gameDate ?? "",
+          state,
+          statusDetail,
+          competitors: [away, home],
+          broadcasts,
+          venue: g.venue?.name,
+          link: `https://www.mlb.com/gameday/${g.gamePk}`,
         })
       }
     }
@@ -902,7 +953,11 @@ export interface SportsData {
 
 export async function getTodaysGames(): Promise<SportsData> {
   const [results, news, statcast, f1Standings, pgaLeaderboard, mlbStandings] = await Promise.all([
-    Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStormChasers() : fetchLeague(league)))),
+    Promise.all(LEAGUES.map((league) => {
+      if (league.id === "aaa") return fetchStormChasers()
+      if (league.id === "mlb") return fetchMLBGames()
+      return fetchLeague(league)
+    })),
     getTopNews(),
     getStatcastHighlights(),
     getF1Standings(),
