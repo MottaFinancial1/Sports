@@ -63,6 +63,9 @@ export function SportsGuide({
     refreshWhenHidden: true,
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
+    // Immediately fetch fresh data on mount — don't wait 60s for the first
+    // poll. If SSR happened to pass stale props, this corrects it right away.
+    revalidateOnMount: true,
   })
   const games = data?.games ?? initialGames
   const news = data?.news ?? initialNews
