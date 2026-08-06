@@ -335,7 +335,7 @@ export function SportsGuide({
                             {leagueGames.length}
                           </span>
                         </h3>
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${leagueGames.length >= 6 ? "lg:grid-cols-3" : ""}`}>
                           {leagueGames.map((g) => (
                             <GameCard key={g.id} game={g} />
                           ))}
