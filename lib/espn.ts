@@ -101,6 +101,7 @@ export interface Game {
   round?: string // Tennis: e.g. "Round of 128", "Quarterfinals", "Final"
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
   leaders?: GameLeader[] // Star performers (populated for live games)
+  isToday?: boolean // true if the game date matches today (server local date)
 }
 
 export interface GameLeader {
@@ -964,6 +965,13 @@ export async function getTodaysGames(): Promise<SportsData> {
     getPGALeaderboard(),
     getMLBStandings(),
   ])
-  const games = results.flat()
+  // Stamp isToday: compare each game's date against today's YYYYMMDD string
+  // so the client can sort/filter without re-parsing dates in multiple places.
+  const todayStr = todayESPN() // "YYYYMMDD"
+  const todayYMD = `${todayStr.slice(0, 4)}-${todayStr.slice(4, 6)}-${todayStr.slice(6, 8)}`
+  const games = results.flat().map((g) => ({
+    ...g,
+    isToday: g.state === "in" || g.state === "post" || g.date.startsWith(todayYMD),
+  }))
   return { games, news, statcast, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt: new Date().toISOString() }
 }
