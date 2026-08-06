@@ -220,9 +220,11 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
   const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard`
   try {
     const res = await fetch(url, {
-      // Refresh every 60s so live scores stay current; the endpoint tracks
-      // the current day itself, so the slate rolls over automatically.
-      next: { revalidate: 60 },
+      // no-store ensures production always fetches the live slate rather than
+      // serving a stale ISR-cached response that may have 0 games.
+      // The /api/games route itself is force-dynamic and carries its own
+      // Cache-Control header to allow CDN revalidation downstream.
+      cache: "no-store",
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     })
     if (!res.ok) return []
@@ -367,7 +369,7 @@ async function fetchStormChasers(): Promise<Game[]> {
   const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STORM_CHASERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
   try {
     const res = await fetch(url, {
-      next: { revalidate: 60 },
+      cache: "no-store",
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     })
     if (!res.ok) return []
@@ -416,7 +418,7 @@ async function fetchStormChasers(): Promise<Game[]> {
 // ---------- Favorites ----------
 
 // Games featuring these teams are pinned in a Favorites section at the top.
-export const FAVORITE_TEAMS = ["Los Angeles Angels", "Boston Red Sox", "Omaha Storm Chasers"]
+export const FAVORITE_TEAMS = ["Los Angeles Angels", "Kansas City Royals", "Boston Red Sox", "Omaha Storm Chasers"]
 
 export function isFavoriteGame(game: Game): boolean {
   return game.competitors.some((c) => FAVORITE_TEAMS.some((fav) => c.name.includes(fav) || fav.includes(c.name)))
