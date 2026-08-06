@@ -1,72 +1,69 @@
 "use client"
 
-const LOCATIONS = [
-  { code: "LAX", city: "Anaheim", detail: "Angels", position: "left-[5%] top-[20%]", tone: "border-destructive/30 text-destructive/50" },
-  { code: "BOS", city: "Boston", detail: "Red Sox", position: "right-[4%] top-[14%]", tone: "border-primary/30 text-primary/50" },
-  { code: "OMA", city: "Omaha", detail: "Storm Chasers", position: "left-[38%] top-[30%]", tone: "border-primary/20 text-primary/35" },
-]
-
 /**
- * Stadium-lights backdrop. A fixed full-bleed layer that paints:
- * 1. A radial "floodlight cone" glow from the top-center — amber, stadium feel.
- * 2. A fine dot-grid that implies a scoreboard / broadcast overlay.
- * 3. Faint diagonal rule lines for a data-terminal broadcast texture.
- * 4. Team coordinate pins, restrained and non-intrusive.
+ * Bright tech-platform backdrop.
+ * A fixed full-bleed layer with:
+ * 1. A fine square grid — data-terminal / sports analytics HUD feel.
+ * 2. A soft radial blue glow from the top-right — feels like a monitor backlight.
+ * 3. Faint horizontal scan lines for a broadcast overlay texture.
+ * 4. Minimal location pins — restrained, purely decorative.
  */
 export function GeographicBackdrop() {
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
-      {/* Floodlight cone — amber radial from top-center */}
+      {/* Primary radial — electric blue glow, top-right */}
       <div
-        className="absolute inset-x-0 -top-40 h-[70vh]"
+        className="absolute -right-32 -top-32 h-[60vh] w-[60vw]"
         style={{
           background:
-            "radial-gradient(ellipse 80% 60% at 50% 0%, oklch(0.82 0.19 72 / 0.07) 0%, oklch(0.82 0.19 72 / 0.03) 40%, transparent 70%)",
+            "radial-gradient(ellipse 70% 60% at 100% 0%, oklch(0.52 0.24 262 / 0.07) 0%, oklch(0.52 0.24 262 / 0.03) 45%, transparent 70%)",
         }}
       />
 
-      {/* Secondary accent glow — bottom-right warm pool */}
+      {/* Secondary — faint sky blue pool, bottom-left */}
       <div
-        className="absolute -bottom-20 -right-20 h-[40vh] w-[40vw]"
+        className="absolute -bottom-24 -left-24 h-[45vh] w-[50vw]"
         style={{
           background:
-            "radial-gradient(ellipse 60% 60% at 100% 100%, oklch(0.65 0.22 25 / 0.06) 0%, transparent 70%)",
+            "radial-gradient(ellipse 65% 55% at 0% 100%, oklch(0.65 0.18 210 / 0.05) 0%, transparent 70%)",
         }}
       />
 
-      {/* Dot-grid overlay — fine scoreboard texture, desktop only */}
+      {/* Fine square grid — data-terminal texture */}
       <div
-        className="absolute inset-0 hidden lg:block"
+        className="absolute inset-0"
         style={{
           backgroundImage:
-            "radial-gradient(circle, oklch(1 0 0 / 0.06) 1px, transparent 1px)",
-          backgroundSize: "40px 40px",
+            "linear-gradient(oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px), linear-gradient(90deg, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
         }}
       />
 
-      {/* Vertical centre rule */}
-      <div className="absolute inset-y-0 left-1/2 w-px bg-border/20 hidden lg:block" />
+      {/* Top-left corner bracket — HUD motif */}
+      <div className="absolute left-6 top-6 hidden lg:block">
+        <div className="h-6 w-6 border-l-2 border-t-2 border-primary/20" />
+      </div>
 
-      {/* Horizontal centre rule */}
-      <div className="absolute inset-x-0 top-1/2 h-px bg-border/15 hidden lg:block" />
+      {/* Top-right corner bracket */}
+      <div className="absolute right-6 top-6 hidden lg:block">
+        <div className="h-6 w-6 border-r-2 border-t-2 border-primary/20" />
+      </div>
 
-      {/* Team coordinate pins — desktop only */}
-      <div className="hidden lg:block">
-        {LOCATIONS.map((location) => (
-          <div key={location.code} className={`absolute ${location.position} opacity-60`}>
-            <div className={`relative border-l pl-3 font-mono ${location.tone}`}>
-              <span className="absolute -left-1 top-0 h-2 w-2 rounded-full border bg-background" />
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em]">{location.code}</p>
-              <p className="mt-1 text-[9px] uppercase tracking-widest text-muted-foreground/30">
-                {location.city} / {location.detail}
-              </p>
-            </div>
-          </div>
-        ))}
+      {/* Bottom-left corner bracket */}
+      <div className="absolute bottom-6 left-6 hidden lg:block">
+        <div className="h-6 w-6 border-b-2 border-l-2 border-primary/20" />
+      </div>
 
-        <div className="absolute bottom-8 left-8 font-mono text-[9px] uppercase tracking-[0.28em] text-muted-foreground/18">
-          Favorite team network · coast to coast
-        </div>
+      {/* Bottom-right corner bracket */}
+      <div className="absolute bottom-6 right-6 hidden lg:block">
+        <div className="h-6 w-6 border-b-2 border-r-2 border-primary/20" />
+      </div>
+
+      {/* Platform label — bottom left */}
+      <div className="absolute bottom-8 left-10 hidden lg:block">
+        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.3em] text-primary/20">
+          Ball Knowledge · Sports Intelligence Platform
+        </span>
       </div>
     </div>
   )

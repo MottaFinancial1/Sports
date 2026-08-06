@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, isTextUIPart } from 'ai'
 import ReactMarkdown from 'react-markdown'
-import { Globe, MessageCircle, Send, Sparkles, X } from 'lucide-react'
+import { Bot, CircleCheck, Send, Sparkles, X } from 'lucide-react'
 
 const SUGGESTED = [
   'Any big trades today?',
@@ -26,7 +26,6 @@ export function AskSlate() {
 
   const isLoading = status === 'submitted' || status === 'streaming'
 
-  // Auto-scroll to the latest message.
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
@@ -55,14 +54,19 @@ export function AskSlate() {
 
   return (
     <section className="flex h-full flex-col">
-      <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
-        <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-        Ask Ball Knowledge
+      {/* Section header */}
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <Sparkles className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
+          <h2 className="font-mono text-xs font-bold uppercase tracking-[0.22em] text-primary">
+            Ask Ball Knowledge
+          </h2>
+        </div>
         {hasMessages ? (
           <button
             type="button"
             onClick={handleClear}
-            className="ml-auto flex items-center gap-1 rounded-sm px-2 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+            className="ml-auto flex items-center gap-1 rounded-full border border-border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
             aria-label="Clear conversation"
           >
             <X className="h-3 w-3" />
@@ -71,31 +75,54 @@ export function AskSlate() {
         ) : (
           <span className="h-px flex-1 bg-border" aria-hidden="true" />
         )}
-      </h2>
+      </div>
 
-      <div className="relative flex flex-1 flex-col overflow-hidden rounded-lg border border-destructive/30 bg-card shadow-[inset_3px_0_0_var(--color-destructive)]">
+      {/* Main panel */}
+      <div className="data-grid relative flex flex-1 flex-col overflow-hidden rounded-xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background shadow-sm">
+
+        {/* Top accent bar */}
+        <div className="flex h-1 w-full overflow-hidden rounded-t-xl">
+          <div className="h-full w-full bg-gradient-to-r from-primary via-primary/60 to-primary/20" />
+        </div>
+
+        {/* Signal row */}
+        <div className="flex items-center justify-between border-b border-primary/10 bg-primary/[0.025] px-4 py-2.5 sm:px-5">
+          <div className="flex items-center gap-2 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-primary/10 text-primary" aria-hidden="true">
+              <CircleCheck className="h-3 w-3" />
+            </span>
+            Live sports context
+          </div>
+          <span className="flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-primary">
+            <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
+            Ready
+          </span>
+        </div>
+
         {/* Message thread */}
-        <div className="flex max-h-[480px] min-h-[120px] flex-col gap-3 overflow-y-auto p-4 sm:p-5">
+        <div className="flex max-h-[460px] min-h-[120px] flex-col gap-3 overflow-y-auto p-4 sm:p-5">
           {!hasMessages ? (
-            /* Empty state */
-            <div className="flex flex-col gap-3">
-              <div>
-                <p className="font-mono text-xs font-bold uppercase tracking-widest text-foreground">
-                  Intelligence desk
-                </p>
-                <p className="mt-1 flex items-center gap-1.5 text-xs leading-relaxed text-muted-foreground">
-                  <Globe className="h-3 w-3 shrink-0" aria-hidden="true" />
-                  Scores, schedules, stats, injuries, trades — sourced live from ESPN, The Athletic,
-                  X, Reddit, wire services, and more.
-                </p>
+            <div className="flex flex-col gap-4">
+              {/* Empty state */}
+              <div className="flex items-start gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                  <Bot className="h-4 w-4" />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-bold text-foreground">Sports Intelligence, live.</p>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    Scores, schedules, stats, injuries, trades — sourced live from ESPN, The Athletic, and wire services. Ask anything.
+                  </p>
+                </div>
               </div>
+              {/* Suggested questions */}
               <div className="flex flex-wrap gap-2">
                 {SUGGESTED.map((q) => (
                   <button
                     key={q}
                     type="button"
                     onClick={() => handleSuggestion(q)}
-                    className="rounded-sm border border-border bg-card px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:border-destructive/50 hover:text-foreground"
+                    className="rounded-full border border-border bg-background px-3 py-1.5 text-left text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:bg-primary/5 hover:text-primary"
                   >
                     {q}
                   </button>
@@ -103,10 +130,8 @@ export function AskSlate() {
               </div>
             </div>
           ) : (
-            /* Conversation */
             <>
               {messages.map((msg) => {
-                // Extract plain text from the UIMessage parts array.
                 const text = msg.parts
                   .filter(isTextUIPart)
                   .map((p) => p.text)
@@ -115,19 +140,18 @@ export function AskSlate() {
                 return (
                   <div
                     key={msg.id}
-                    className={`flex gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex gap-2.5 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     {msg.role === 'assistant' ? (
-                      <MessageCircle
-                        className="mt-1 h-4 w-4 shrink-0 text-primary"
-                        aria-hidden="true"
-                      />
+                      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                        <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                      </div>
                     ) : null}
                     <div
-                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm leading-relaxed ${
+                      className={`max-w-[85%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed ${
                         msg.role === 'user'
-                          ? 'bg-primary font-mono text-primary-foreground'
-                          : 'border border-border bg-muted/40 text-foreground'
+                          ? 'bg-primary font-medium text-primary-foreground'
+                          : 'border border-border bg-card text-foreground shadow-sm'
                       }`}
                     >
                       {msg.role === 'user' ? (
@@ -159,7 +183,7 @@ export function AskSlate() {
                               </a>
                             ),
                             code: ({ children }) => (
-                              <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                              <code className="rounded bg-secondary px-1 py-0.5 font-mono text-xs">
                                 {children}
                               </code>
                             ),
@@ -173,14 +197,12 @@ export function AskSlate() {
                 )
               })}
 
-              {/* Typing indicator while the response is incoming */}
               {isLoading && (
-                <div className="flex justify-start gap-2">
-                  <MessageCircle
-                    className="mt-1 h-4 w-4 shrink-0 text-primary"
-                    aria-hidden="true"
-                  />
-                  <div className="flex items-center gap-1 rounded-lg border border-border bg-muted/40 px-3 py-2">
+                <div className="flex justify-start gap-2.5">
+                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 shadow-sm">
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
                     <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
@@ -193,24 +215,24 @@ export function AskSlate() {
         </div>
 
         {/* Input bar */}
-        <div className="border-t border-border bg-card/80 p-3 sm:p-4">
+        <div className="border-t border-border bg-background/80 p-3 backdrop-blur sm:p-4">
           <div className="flex gap-2">
             <input
               ref={inputRef}
               type="text"
-              placeholder="Any big trades today? Who leads F1? Red Sox next game?"
+              placeholder="Ask about any game, player, trade, or stat..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={onKeyDown}
               disabled={isLoading}
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm font-mono placeholder:text-muted-foreground focus:border-destructive focus:outline-none disabled:opacity-50"
+              className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm placeholder:text-muted-foreground focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
               aria-label="Ask Ball Knowledge a question"
             />
             <button
               type="button"
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className="flex items-center justify-center rounded-lg bg-destructive px-3 py-2 font-mono text-xs font-bold uppercase text-destructive-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg disabled:opacity-40"
               aria-label="Send"
             >
               <Send className="h-4 w-4" aria-hidden="true" />

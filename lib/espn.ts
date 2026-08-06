@@ -655,11 +655,11 @@ function statVal(stats: EspnStandingsEntry["stats"], name: string): number {
 
 export async function getF1Standings(): Promise<{ drivers: F1Driver[]; constructors: F1Constructor[] }> {
   const [driverRes, constructorRes] = await Promise.all([
-    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2025&type=driver", {
+    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2026&type=driver", {
       next: { revalidate: 300 },
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     }),
-    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2025&type=constructor", {
+    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2026&type=constructor", {
       next: { revalidate: 300 },
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     }),
@@ -819,7 +819,7 @@ export interface MLBStandingTeam {
 export async function getMLBStandings(): Promise<MLBStandingTeam[]> {
   try {
     const res = await fetch(
-      "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2025&standingsTypes=regularSeason&hydrate=team",
+      "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2026&standingsTypes=regularSeason&hydrate=team",
       {
         next: { revalidate: 300 },
         headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },

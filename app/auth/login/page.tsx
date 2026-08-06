@@ -62,14 +62,19 @@ export default function Page() {
   }
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+    <div className="flex min-h-svh w-full items-center justify-center bg-background p-6 md:p-10">
       <div className="w-full max-w-sm">
+        <div className="mb-6 text-center">
+          <span className="text-xl font-black tracking-tight text-foreground">
+            Ball<span className="text-primary">Knowledge</span>
+          </span>
+        </div>
         <div className="flex flex-col gap-6">
-          <Card>
+          <Card className="border-border shadow-sm">
             <CardHeader>
-              <CardTitle className="text-2xl">Login</CardTitle>
+              <CardTitle className="text-xl font-bold">Sign in</CardTitle>
               <CardDescription>
-                Enter your email below to login to your account
+                Enter your email and password to continue
               </CardDescription>
             </CardHeader>
             <CardContent>

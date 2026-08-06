@@ -37,14 +37,14 @@ export function AuthStatus() {
   }
 
   if (loading) {
-    return <span className="h-5 w-16 animate-pulse rounded-sm bg-muted" aria-hidden="true" />
+    return <span className="h-6 w-16 animate-pulse rounded-full bg-secondary" aria-hidden="true" />
   }
 
   if (!user) {
     return (
       <Link
         href="/auth/login"
-        className="flex items-center gap-1.5 rounded-sm border border-primary/40 bg-primary/10 px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/20"
+        className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/8 px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-primary transition-colors hover:bg-primary/15"
       >
         <LogIn className="h-3 w-3 shrink-0" aria-hidden="true" />
         Sign in
@@ -56,14 +56,14 @@ export function AuthStatus() {
 
   return (
     <div className="flex items-center gap-2">
-      <span className="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/80">
+      <span className="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-foreground/70">
         <UserIcon className="h-3 w-3 shrink-0 text-primary" aria-hidden="true" />
         <span className="max-w-[10ch] truncate">{label}</span>
       </span>
       <button
         type="button"
         onClick={handleSignOut}
-        className="flex items-center gap-1.5 rounded-sm border border-border bg-card px-2 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive"
+        className="flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground transition-colors hover:border-destructive/30 hover:text-destructive"
       >
         <LogOut className="h-3 w-3 shrink-0" aria-hidden="true" />
         Sign out

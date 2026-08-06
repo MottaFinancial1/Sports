@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -48,62 +48,66 @@
 }
 
 /*
-  Ball Knowledge — stadium-lights theme.
-  Deep obsidian black surfaces, electric amber/gold primary (stadium floodlights),
-  signal red for LIVE states, and cool white text.
-  Palette (4 colors): deep black-blue neutrals, off-white text, electric amber, signal red.
+  Ball Knowledge — Bright Tech Platform theme.
+  Pure white surface, electric cobalt-blue primary (#0066FF feel),
+  signal red for LIVE states, deep ink foreground.
+  Palette (5 colors): white/light neutrals, deep ink, electric blue, sky accent, signal red.
 */
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* Obsidian black-blue base — deeper and cooler than before */
-  --background: oklch(0.10 0.015 255);
-  --foreground: oklch(0.96 0.005 80);
+  /* Clean white base */
+  --background: oklch(0.99 0.002 240);
+  --foreground: oklch(0.12 0.02 250);
 
-  /* Elevated surface — slightly lighter, still near-black */
-  --card: oklch(0.15 0.018 255);
-  --card-foreground: oklch(0.96 0.005 80);
-  --popover: oklch(0.15 0.018 255);
-  --popover-foreground: oklch(0.96 0.005 80);
+  /* Card — barely-off-white with a cool tint */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.12 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.12 0.02 250);
 
-  /* Electric amber — stadium floodlight gold */
-  --primary: oklch(0.82 0.19 72);
-  --primary-foreground: oklch(0.10 0.015 255);
+  /* Electric cobalt blue — the platform's signal color */
+  --primary: oklch(0.52 0.24 262);
+  --primary-foreground: oklch(1 0 0);
 
-  /* Subtle mid-surface */
-  --secondary: oklch(0.20 0.022 255);
-  --secondary-foreground: oklch(0.96 0.005 80);
-  --muted: oklch(0.20 0.022 255);
-  --muted-foreground: oklch(0.65 0.015 255);
-  --accent: oklch(0.20 0.022 255);
-  --accent-foreground: oklch(0.96 0.005 80);
+  /* Light blue-gray surface */
+  --secondary: oklch(0.95 0.008 240);
+  --secondary-foreground: oklch(0.25 0.02 250);
+  --muted: oklch(0.95 0.008 240);
+  --muted-foreground: oklch(0.52 0.015 250);
+  --accent: oklch(0.94 0.015 250);
+  --accent-foreground: oklch(0.20 0.02 250);
 
   /* Signal red — live / alert state */
-  --destructive: oklch(0.65 0.22 25);
+  --destructive: oklch(0.58 0.24 25);
 
-  /* Hairline borders — subtle cool blue-white */
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 16%);
-  --ring: oklch(0.82 0.19 72);
+  /* Crisp borders */
+  --border: oklch(0.88 0.008 240);
+  --input: oklch(0.90 0.008 240);
+  --ring: oklch(0.52 0.24 262);
 
   /* Charts */
-  --chart-1: oklch(0.82 0.19 72);
-  --chart-2: oklch(0.65 0.22 25);
-  --chart-3: oklch(0.55 0.015 255);
-  --chart-4: oklch(0.32 0.018 255);
-  --chart-5: oklch(0.18 0.015 255);
+  --chart-1: oklch(0.52 0.24 262);
+  --chart-2: oklch(0.58 0.24 25);
+  --chart-3: oklch(0.65 0.18 210);
+  --chart-4: oklch(0.75 0.12 145);
+  --chart-5: oklch(0.72 0.15 55);
 
-  --radius: 0.25rem;
+  --radius: 0.5rem;
 
   /* Sidebar */
-  --sidebar: oklch(0.13 0.018 255);
-  --sidebar-foreground: oklch(0.96 0.005 80);
-  --sidebar-primary: oklch(0.82 0.19 72);
-  --sidebar-primary-foreground: oklch(0.10 0.015 255);
-  --sidebar-accent: oklch(0.20 0.022 255);
-  --sidebar-accent-foreground: oklch(0.96 0.005 80);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.82 0.19 72);
+  --sidebar: oklch(0.97 0.004 240);
+  --sidebar-foreground: oklch(0.12 0.02 250);
+  --sidebar-primary: oklch(0.52 0.24 262);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.015 250);
+  --sidebar-accent-foreground: oklch(0.20 0.02 250);
+  --sidebar-border: oklch(0.88 0.008 240);
+  --sidebar-ring: oklch(0.52 0.24 262);
+
+  /* Platform accent — sky blue tint for subtle backgrounds */
+  --sky: oklch(0.94 0.04 240);
+  --sky-foreground: oklch(0.40 0.18 252);
 }
 
 @layer base {
@@ -115,22 +119,52 @@
   }
 
   ::selection {
-    background: color-mix(in oklch, var(--destructive) 65%, transparent);
-    color: var(--foreground);
+    background: oklch(0.52 0.24 262 / 0.15);
+    color: oklch(0.12 0.02 250);
   }
 }
 
-/* Blinking live indicator, terminal-cursor style */
+/* Blinking live indicator */
 @keyframes live-blink {
   0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.25;
-  }
+  100% { opacity: 1; }
+  50%  { opacity: 0.25; }
 }
 
 .live-dot {
   animation: live-blink 1.4s ease-in-out infinite;
+}
+
+/* Shimmer scan line for the Ask panel */
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+.scan-line {
+  animation: scan-line 3s linear infinite;
+}
+
+/* Subtle data-surface texture: adds depth without competing with content. */
+.data-grid {
+  background-image: linear-gradient(to right, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Horizontal news ticker */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot,
+  .scan-line {
+    animation: none;
+  }
+  /* Freeze the ticker; user can still scroll it manually */
+  [style*="ticker-scroll"] {
+    animation-play-state: paused !important;
+  }
 }
