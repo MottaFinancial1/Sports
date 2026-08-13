@@ -2,27 +2,32 @@
 
 import { useEffect, useMemo, useState } from "react"
 import useSWR from "swr"
-import { CalendarDays, Clock, Flame, RefreshCw, Star, Sunrise, Sun, Moon, Trophy } from "lucide-react"
+import { Activity, Star } from "lucide-react"
 import { AskSlate } from "@/components/ask-slate"
+import { LiveCrawl } from "@/components/live-crawl"
+import { AuthStatus } from "@/components/auth-status"
 import { GameCard } from "@/components/game-card"
+import { KeyDates } from "@/components/key-dates"
 import { SportsNews } from "@/components/sports-news"
 import { SportSpotlight, orderCategories, type CategoryStatus } from "@/components/sport-spotlight"
-import { StandingsLeaderboard } from "@/components/standings-leaderboard"
+import { StandingsLeaderboard, F1DriverStandings, F1ConstructorStandings, PGALeaderboard } from "@/components/standings-leaderboard"
 import { StarPerformers } from "@/components/star-performers"
 import {
   LEAGUES,
   isFavoriteGame,
+  type F1Constructor,
+  type F1Driver,
   type Game,
   type LeagueCategory,
   type NewsArticle,
+  type PGAPlayer,
   type SportsData,
   type StatcastHighlight,
 } from "@/lib/espn"
+import { getTeamViews, gameViewScore, type TeamViewMap } from "@/lib/team-views"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
-// Personalized priority: baseball first, then football, soccer, F1, golf,
-// tennis, basketball.
 const CATEGORY_ORDER: LeagueCategory[] = [
   "Baseball",
   "Football",
@@ -35,43 +40,49 @@ const CATEGORY_ORDER: LeagueCategory[] = [
 
 type Filter = "all" | "live" | string
 
-function greetingForHour(hour: number) {
-  if (hour < 12) return { text: "Good morning", Icon: Sunrise }
-  if (hour < 17) return { text: "Good afternoon", Icon: Sun }
-  return { text: "Good evening", Icon: Moon }
-}
-
 export function SportsGuide({
   games: initialGames,
   news: initialNews,
   statcast: initialStatcast,
+  f1Standings: initialF1Standings,
+  pgaLeaderboard: initialPGALeaderboard,
+  mlbStandings: initialMlbStandings,
   fetchedAt: initialFetchedAt,
 }: {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
+  f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
+  pgaLeaderboard: PGAPlayer[]
+  mlbStandings: import("@/lib/espn").MLBStandingTeam[]
   fetchedAt: string
 }) {
-  // Poll for fresh data every 60s, revalidate when the tab regains focus or
-  // the network reconnects, and keep polling in background tabs. The
-  // server-rendered payload seeds the cache so there is never a blank state.
   const { data } = useSWR<SportsData>("/api/games", fetcher, {
-    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, fetchedAt: initialFetchedAt },
+    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, f1Standings: initialF1Standings, pgaLeaderboard: initialPGALeaderboard, mlbStandings: initialMlbStandings, fetchedAt: initialFetchedAt },
     refreshInterval: 60_000,
     refreshWhenHidden: true,
     revalidateOnFocus: true,
     revalidateOnReconnect: true,
+    // Immediately fetch fresh data on mount — don't wait 60s for the first
+    // poll. If SSR happened to pass stale props, this corrects it right away.
+    revalidateOnMount: true,
   })
   const games = data?.games ?? initialGames
   const news = data?.news ?? initialNews
   const statcast = data?.statcast ?? initialStatcast
+  const f1Standings = data?.f1Standings ?? initialF1Standings
+  const pgaLeaderboard = data?.pgaLeaderboard ?? initialPGALeaderboard
+  const mlbStandings = data?.mlbStandings ?? initialMlbStandings
   const fetchedAt = data?.fetchedAt ?? initialFetchedAt
 
   const [filter, setFilter] = useState<Filter>("all")
   const [today, setToday] = useState<string>("")
   const [updated, setUpdated] = useState<string>("")
-  const [greeting, setGreeting] = useState<{ text: string; Icon: typeof Sunrise } | null>(null)
-  const [nextUp, setNextUp] = useState<string>("")
+  const [teamViews, setTeamViews] = useState<TeamViewMap>({})
+
+  useEffect(() => {
+    setTeamViews(getTeamViews())
+  }, [])
 
   useEffect(() => {
     const now = new Date()
@@ -83,21 +94,15 @@ export function SportsGuide({
       }),
     )
     setUpdated(new Date(fetchedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }))
-    setGreeting(greetingForHour(now.getHours()))
-
-    // Next upcoming start time from now.
-    const upcoming = games
-      .filter((g) => g.state === "pre" && new Date(g.date).getTime() > now.getTime())
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
-    setNextUp(
-      upcoming ? new Date(upcoming.date).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) : "—",
-    )
-  }, [fetchedAt, games])
+  }, [fetchedAt])
 
   const liveCount = useMemo(() => games.filter((g) => g.state === "in").length, [games])
-  const finalCount = useMemo(() => games.filter((g) => g.state === "post").length, [games])
+  const todayCount = useMemo(() => games.filter((g) => g.isToday).length, [games])
+  const liveGames = useMemo(
+    () => games.filter((g) => g.state === "in").sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [games],
+  )
 
-  // Leagues that actually have games today, in a stable order.
   const activeLeagues = useMemo(() => {
     const ids = new Set(games.map((g) => g.leagueId))
     return LEAGUES.filter((l) => ids.has(l.id))
@@ -105,22 +110,36 @@ export function SportsGuide({
 
   const favoriteGames = useMemo(
     () =>
-      games.filter(isFavoriteGame).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [games],
+      games.filter(isFavoriteGame).sort((a, b) => {
+        const viewDiff =
+          gameViewScore(b.competitors.map((c) => c.name), teamViews) -
+          gameViewScore(a.competitors.map((c) => c.name), teamViews)
+        if (viewDiff !== 0) return viewDiff
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
+      }),
+    [games, teamViews],
   )
+
+  const mostWatchedGames = useMemo(() => {
+    if (Object.keys(teamViews).length === 0) return []
+    return games
+      .filter((g) => !isFavoriteGame(g))
+      .map((g) => ({ game: g, score: gameViewScore(g.competitors.map((c) => c.name), teamViews) }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map(({ game }) => game)
+  }, [games, teamViews])
 
   const filtered = useMemo(() => {
     if (filter === "all") return games
     if (filter === "live") return games.filter((g) => g.state === "in")
+    if (filter === "today") return games.filter((g) => g.isToday)
     if (filter === "favorites") return games.filter(isFavoriteGame)
     if (filter.startsWith("cat:")) return games.filter((g) => g.category === filter.slice(4))
     return games.filter((g) => g.leagueId === filter)
   }, [games, filter])
 
-  // Sort games by start time within each league, then order categories by
-  // activity (live first, then starting soon, then scheduled, idle last),
-  // with ties broken by personal priority. The homepage reshapes itself
-  // around whatever sports are actually in action.
   const grouped = useMemo(() => {
     const byLeague = new Map<string, Game[]>()
     const byCategory = new Map<LeagueCategory, Game[]>()
@@ -133,7 +152,17 @@ export function SportsGuide({
       byCategory.set(g.category, catArr)
     }
     for (const arr of byLeague.values()) {
-      arr.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      arr.sort((a, b) => {
+        // Live first, then today's games, then future
+        const statePriority = (g: Game) => (g.state === "in" ? 0 : g.isToday ? 1 : 2)
+        const stateDiff = statePriority(a) - statePriority(b)
+        if (stateDiff !== 0) return stateDiff
+        const viewDiff =
+          gameViewScore(b.competitors.map((c) => c.name), teamViews) -
+          gameViewScore(a.competitors.map((c) => c.name), teamViews)
+        if (viewDiff !== 0) return viewDiff
+        return new Date(a.date).getTime() - new Date(b.date).getTime()
+      })
     }
 
     const ordered = orderCategories(
@@ -152,64 +181,70 @@ export function SportsGuide({
         }
       })
       .filter((c) => c.leagues.length > 0)
-  }, [filtered])
-
-  const GreetingIcon = greeting?.Icon ?? Sunrise
+  }, [filtered, teamViews])
 
   return (
-    <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
-      {/* Terminal-style status bar */}
-      <div className="-mx-4 flex items-center justify-between gap-3 border-b border-border px-4 py-2 font-mono text-[11px] uppercase tracking-widest text-muted-foreground sm:-mx-6 sm:px-6">
-        <span className="flex items-center gap-1.5">
-          <GreetingIcon className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
-          {greeting?.text ?? "Hello"}
-        </span>
-        <span className="hidden items-center gap-1.5 sm:flex">
-          <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
-          {today || "Loading…"}
-        </span>
-        <span className="flex items-center gap-1.5 text-primary">
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-          Synced {updated || "…"}
-        </span>
-      </div>
+    <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
 
-      <header className="flex flex-col gap-5 pt-7 sm:pt-10">
-        <div className="flex flex-wrap items-end justify-between gap-4 border-l-2 border-destructive pl-4">
-          <div>
-            <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.24em] text-destructive">
-              Personalized sports intelligence
-            </p>
-            <h1 className="font-mono text-4xl font-extrabold uppercase leading-none tracking-tighter text-foreground sm:text-6xl">
-              Ball<span className="text-destructive">_</span>Knowledge
-            </h1>
-          </div>
-          <p className="max-w-xs text-pretty text-sm leading-relaxed text-muted-foreground">
-            Live scores, standout performances, and the next events worth your attention.
-          </p>
+      {/* Top bar */}
+      <div className="-mx-4 flex items-center justify-between border-b border-border bg-background/90 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+        <div className="flex items-center gap-2">
+          {/* Wordmark */}
+          <span className="text-sm font-black tracking-tight text-foreground">
+            Ball<span className="text-primary">Knowledge</span>
+          </span>
+          <span className="hidden h-4 w-px bg-border sm:block" />
+          <span className="hidden font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground sm:block">
+            {today || "—"}
+          </span>
         </div>
 
-        <div className={`grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border ${liveCount > 0 ? "border-destructive/40" : "border-border"}`}>
-          <BriefingStat icon={Trophy} label="Games today" value={String(games.length)} />
-          <BriefingStat
-            icon={Flame}
-            label="Live now"
-            value={String(liveCount)}
-            highlight={liveCount > 0}
-            onClick={liveCount > 0 ? () => setFilter("live") : undefined}
-          />
+        <div className="flex items-center gap-3">
+          {liveCount > 0 && (
+            <span className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-destructive">
+              <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-destructive" />
+              {liveCount} Live
+            </span>
+          )}
+          <AuthStatus />
+        </div>
+      </div>
+
+      {/* Hero header */}
+      <header className="data-grid relative overflow-hidden rounded-2xl border border-primary/10 bg-card/60 px-5 pb-7 pt-8 sm:px-8 sm:pb-9 sm:pt-12">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+              <Activity className="h-4 w-4" />
+            </div>
+            <span className="font-mono text-xs font-bold uppercase tracking-[0.25em] text-primary">
+              Sports Intelligence Platform
+            </span>
+          </div>
+          <h1 className="text-5xl font-black leading-none tracking-tight text-foreground sm:text-7xl">
+            Ask Ball<br />
+            <span className="text-primary">Knowledge.</span>
+          </h1>
+          <p className="max-w-xl text-base leading-relaxed text-muted-foreground">
+            Live scores, standings, breaking news, and AI-powered answers for the passionate sports fan.
+          </p>
         </div>
       </header>
 
+      {/* Filter nav */}
       <nav
         aria-label="Filter by league"
-        className="sticky top-0 z-10 -mx-4 mb-6 mt-4 flex gap-2 overflow-x-auto border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
+        className="sticky top-0 z-10 -mx-4 mb-8 flex gap-1.5 overflow-x-auto border-b border-border bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6"
       >
         <FilterChip active={filter === "all"} onClick={() => setFilter("all")}>
           All ({games.length})
         </FilterChip>
         <FilterChip active={filter === "live"} onClick={() => setFilter("live")} highlight={liveCount > 0}>
+          {liveCount > 0 && <span className="live-dot mr-1 inline-block h-1.5 w-1.5 rounded-full bg-destructive" />}
           Live ({liveCount})
+        </FilterChip>
+        <FilterChip active={filter === "today"} onClick={() => setFilter("today")}>
+          Today ({todayCount})
         </FilterChip>
         {favoriteGames.length > 0 ? (
           <FilterChip active={filter === "favorites"} onClick={() => setFilter("favorites")}>
@@ -223,127 +258,175 @@ export function SportsGuide({
         ))}
       </nav>
 
-      {filter === "all" ? (
-        <SportSpotlight
-          games={games}
-          priority={CATEGORY_ORDER}
-          onFilterLeague={(category) => setFilter(`cat:${category}`)}
-        />
-      ) : null}
+      {/* Live scores / upcoming crawl */}
+      <LiveCrawl games={games} />
 
-      {filter === "all" || filter === "live" ? (
-        <section className="mb-10">
-          <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-destructive">
-            <Flame className="h-3.5 w-3.5" aria-hidden="true" />
-            Live Games Now
-            <span className="h-px flex-1 bg-border" aria-hidden="true" />
-          </h2>
-          {games.filter((g) => g.state === "in").length > 0 ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {games
-                .filter((g) => g.state === "in")
-                .sort((a, b) => CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category))
-                .map((g) => (
-                  <GameCard key={g.id} game={g} />
-                ))}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border bg-card px-6 py-8 text-center">
-              <p className="text-sm text-muted-foreground">No live games at the moment</p>
-            </div>
-          )}
-        </section>
-      ) : null}
+      {/* Two-column layout: sticky Ask panel left, scrollable content right */}
+      <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
 
-      {filter === "all" ? <SportsNews articles={news} /> : null}
-
-      {filter === "all" ? <AskSlate /> : null}
-
-      {filter === "all" && favoriteGames.length > 0 ? (
-        <section className="mb-10">
-          <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-primary">
-            <Star className="h-3.5 w-3.5 fill-primary" aria-hidden="true" />
-            Favorite Teams
-            <span className="h-px flex-1 bg-border" aria-hidden="true" />
-          </h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {favoriteGames.map((g) => (
-              <GameCard key={`fav-${g.id}`} game={g} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {filter === "all" ? (
-        <>
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "f1")} leagueId="f1" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "mlb")} leagueId="mlb" />
-          <StandingsLeaderboard games={games.filter((g) => g.leagueId === "pga")} leagueId="pga" />
-        </>
-      ) : null}
-
-      {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
-
-      {grouped.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-card px-6 py-16 text-center">
-          <p className="text-lg font-semibold text-foreground">No games match this filter</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Try another league, or check back — the schedule refreshes automatically.
-          </p>
+        {/* LEFT — sticky Ask Ball Knowledge */}
+        <div className="w-full lg:sticky lg:top-[100px] lg:w-[380px] lg:shrink-0 xl:w-[420px]">
+          <AskSlate />
         </div>
-      ) : (
-        <div className="flex flex-col gap-10">
-          {grouped.map(({ category, status, leagues }) => (
-            <section key={category} className={status === "done" || status === "scheduled" ? "opacity-75" : ""}>
-              <h2 className="mb-4 flex items-center gap-2 font-mono text-xs font-bold uppercase tracking-widest text-muted-foreground">
-                <span
-                  className={`inline-block h-3 w-1 ${status === "live" ? "bg-destructive" : "bg-primary"}`}
-                  aria-hidden="true"
-                />
-                {category}
-                <CategoryBadge status={status} />
+
+        {/* RIGHT — scrollable content feed */}
+        <div className="min-w-0 flex-1">
+
+          {/* Live Now — highest priority: surfaced before everything else */}
+          {(filter === "all" || filter === "live" || filter === "today") && liveGames.length > 0 ? (
+            <section className="mb-10">
+              <h2 className="mb-4 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+                <span className="live-dot inline-block h-2 w-2 rounded-full bg-destructive" aria-hidden="true" />
+                <span className="text-destructive">Live Now</span>
+                <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-extrabold tabular-nums text-destructive">
+                  {liveGames.length}
+                </span>
                 <span className="h-px flex-1 bg-border" aria-hidden="true" />
               </h2>
-              <div className="flex flex-col gap-6">
-                {leagues.map(({ league, games: leagueGames }) => {
-                  const liveLeagueGames = leagueGames.filter((g) => g.state === "in")
-                  return (
-                    <div key={league.id}>
-                      <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
-                        {league.label}
-                        <span className="font-mono text-xs font-medium tabular-nums text-muted-foreground">
-                          {liveLeagueGames.length > 0 && (
-                            <span className="text-destructive">
-                              {String(liveLeagueGames.length).padStart(2, "0")} live
-                              {liveLeagueGames.length !== leagueGames.length && " / "}
-                            </span>
-                          )}
-                          {liveLeagueGames.length !== leagueGames.length && (
-                            <span>{String(leagueGames.length).padStart(2, "0")} total</span>
-                          )}
-                        </span>
-                      </h3>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        {leagueGames.map((g) => (
-                          <GameCard key={g.id} game={g} />
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
+              <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${liveGames.length >= 6 ? "lg:grid-cols-3" : ""}`}>
+                {liveGames.map((g) => (
+                  <GameCard key={`live-${g.id}`} game={g} />
+                ))}
               </div>
             </section>
-          ))}
+          ) : null}
+
+          {/* Biggest News — first thing visible */}
+          {filter === "all" ? <SportsNews articles={news} /> : null}
+
+          {filter === "all" ? (
+            <div className="mt-8">
+              <SportSpotlight
+                games={games}
+                priority={CATEGORY_ORDER}
+                onFilterLeague={(category) => setFilter(`cat:${category}`)}
+              />
+            </div>
+          ) : null}
+
+          {filter === "all" && mostWatchedGames.length > 0 ? (
+            <section className="mb-10">
+              <SectionLabel>Most Watched</SectionLabel>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {mostWatchedGames.map((g) => (
+                  <GameCard key={`mw-${g.id}`} game={g} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" && favoriteGames.length > 0 ? (
+            <section className="mb-10">
+              <SectionLabel icon={<Star className="h-3.5 w-3.5 fill-primary text-primary" />}>
+                Favorites
+              </SectionLabel>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {favoriteGames.map((g) => (
+                  <GameCard key={`fav-${g.id}`} game={g} />
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {filter === "all" || filter === "live" ? <StarPerformers games={games} statcast={statcast} /> : null}
+
+          {filter === "all" ? (
+            <>
+              <F1DriverStandings drivers={f1Standings.drivers} />
+              <F1ConstructorStandings constructors={f1Standings.constructors} />
+            </>
+          ) : null}
+
+          {filter === "all" ? <PGALeaderboard players={pgaLeaderboard} /> : null}
+          {filter === "all" ? <StandingsLeaderboard standings={mlbStandings} /> : null}
+          {filter === "all" ? <KeyDates /> : null}
+
+          {grouped.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-card px-6 py-16 text-center">
+              <p className="text-sm font-bold text-foreground">No games right now</p>
+              <p className="mt-1 text-xs text-muted-foreground">Refreshes automatically every 60s.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-10">
+              {grouped.map(({ category, status, leagues }) => (
+                <section key={category} className={status === "done" || status === "scheduled" ? "opacity-70" : ""}>
+                  <div className="mb-4 flex items-center gap-2.5">
+                    <span
+                      className={`h-4 w-1 rounded-full ${status === "live" ? "bg-destructive" : "bg-primary"}`}
+                      aria-hidden="true"
+                    />
+                    <h2 className="font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-foreground/70">
+                      {category}
+                    </h2>
+                    <CategoryBadge status={status} />
+                    <span className="h-px flex-1 bg-border" aria-hidden="true" />
+                  </div>
+                  <div className="flex flex-col gap-6">
+                    {leagues.map(({ league, games: leagueGames }) => (
+                      <div key={league.id}>
+                        <h3 className="mb-3 flex items-baseline gap-2 text-sm font-bold text-foreground">
+                          {league.label}
+                          <span className="rounded-full bg-secondary px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-muted-foreground">
+                            {leagueGames.filter((g) => !((filter === "all" || filter === "today") && liveGames.length > 0 && g.state === "in")).length}
+                          </span>
+                          {leagueGames.some((g) => g.state === "in") && (filter === "all" || filter === "today") ? (
+                            <span className="rounded-full bg-destructive/10 px-2 py-0.5 font-mono text-[10px] font-bold tabular-nums text-destructive">
+                              {leagueGames.filter((g) => g.state === "in").length} live ↑
+                            </span>
+                          ) : null}
+                        </h3>
+                        {(() => {
+                          // In all/today view, live games are already shown in the "Live Now"
+                          // section above — exclude them here to avoid duplication.
+                          const showingLiveNow = (filter === "all" || filter === "today") && liveGames.length > 0
+                          const displayGames = showingLiveNow
+                            ? leagueGames.filter((g) => g.state !== "in")
+                            : leagueGames
+                          if (displayGames.length === 0) return null
+                          return (
+                            <div className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${displayGames.length >= 6 ? "lg:grid-cols-3" : ""}`}>
+                              {displayGames.map((g) => (
+                                <div key={g.id} className={!g.isToday && g.state === "pre" ? "opacity-50" : ""}>
+                                  <GameCard game={g} />
+                                </div>
+                              ))}
+                            </div>
+                          )
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          )}
+
         </div>
-      )}
+      </div>
     </div>
+  )
+}
+
+function SectionLabel({
+  children,
+  icon,
+}: {
+  children: React.ReactNode
+  icon?: React.ReactNode
+}) {
+  return (
+    <h2 className="mb-4 flex items-center gap-2 font-mono text-[11px] font-bold uppercase tracking-[0.22em] text-muted-foreground">
+      {icon}
+      {children}
+      <span className="h-px flex-1 bg-border" aria-hidden="true" />
+    </h2>
   )
 }
 
 function CategoryBadge({ status }: { status: CategoryStatus }) {
   if (status === "live") {
     return (
-      <span className="flex items-center gap-1 rounded-sm bg-destructive/15 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-destructive">
+      <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-destructive">
         <span className="live-dot inline-block h-1 w-1 rounded-full bg-destructive" aria-hidden="true" />
         Live
       </span>
@@ -351,63 +434,19 @@ function CategoryBadge({ status }: { status: CategoryStatus }) {
   }
   if (status === "soon") {
     return (
-      <span className="rounded-sm bg-primary/15 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary">
+      <span className="rounded-full bg-primary/10 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary">
         Up Next
       </span>
     )
   }
   if (status === "done") {
     return (
-      <span className="rounded-sm bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-        Wrapped
+      <span className="rounded-full bg-secondary px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        Final
       </span>
     )
   }
   return null
-}
-
-function BriefingStat({
-  icon: Icon,
-  label,
-  value,
-  highlight,
-  onClick,
-}: {
-  icon: typeof Trophy
-  label: string
-  value: string
-  highlight?: boolean
-  onClick?: () => void
-}) {
-  const inner = (
-    <>
-      <span className="flex items-center gap-1.5 font-mono text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-        <Icon className={`h-3 w-3 ${highlight ? "live-dot text-destructive" : "text-primary"}`} aria-hidden="true" />
-        {label}
-      </span>
-      <span
-        className={`mt-1.5 font-mono text-2xl font-extrabold tabular-nums leading-none ${
-          highlight ? "text-destructive" : "text-foreground"
-        }`}
-      >
-        {value}
-      </span>
-    </>
-  )
-
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="flex flex-col items-start bg-destructive/10 p-3.5 text-left transition-colors hover:bg-destructive/20 sm:p-4"
-      >
-        {inner}
-      </button>
-    )
-  }
-
-  return <div className="flex flex-col bg-card p-3.5 sm:p-4">{inner}</div>
 }
 
 function FilterChip({
@@ -425,12 +464,12 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-sm border px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider transition-colors ${
+      className={`shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 font-mono text-[10px] font-bold uppercase tracking-[0.15em] transition-all ${
         active
-          ? "border-primary bg-primary text-primary-foreground"
+          ? "border-primary bg-primary text-primary-foreground shadow-sm"
           : highlight
-            ? "border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/20"
-            : "border-border bg-card text-secondary-foreground hover:border-primary/50 hover:text-primary"
+            ? "border-destructive/30 bg-destructive/8 text-destructive hover:bg-destructive/15"
+            : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-primary"
       }`}
     >
       {children}

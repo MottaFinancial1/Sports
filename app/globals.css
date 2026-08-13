@@ -5,7 +5,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -48,45 +48,66 @@
 }
 
 /*
-  Ball Knowledge — data-terminal theme.
-  A single canonical dark theme: near-black surfaces, electric green accent,
-  hairline borders, and a red-orange signal color for LIVE states.
-  Palette (4 colors): black neutrals, off-white text, electric green, signal red.
+  Ball Knowledge — Bright Tech Platform theme.
+  Pure white surface, electric cobalt-blue primary (#0066FF feel),
+  signal red for LIVE states, deep ink foreground.
+  Palette (5 colors): white/light neutrals, deep ink, electric blue, sky accent, signal red.
 */
 :root {
-  color-scheme: dark;
-  --background: oklch(0.14 0.014 22);
-  --foreground: oklch(0.96 0.005 155);
-  --card: oklch(0.24 0.012 157);
-  --card-foreground: oklch(0.96 0.005 155);
-  --popover: oklch(0.24 0.012 157);
-  --popover-foreground: oklch(0.96 0.005 155);
-  --primary: oklch(0.85 0.23 148);
-  --primary-foreground: oklch(0.22 0.01 155);
-  --secondary: oklch(0.30 0.014 157);
-  --secondary-foreground: oklch(0.96 0.005 155);
-  --muted: oklch(0.30 0.014 157);
-  --muted-foreground: oklch(0.72 0.018 155);
-  --accent: oklch(0.30 0.014 157);
-  --accent-foreground: oklch(0.96 0.005 155);
-  --destructive: oklch(0.68 0.21 27);
-  --border: oklch(1 0 0 / 18%);
-  --input: oklch(1 0 0 / 22%);
-  --ring: oklch(0.85 0.23 148);
-  --chart-1: oklch(0.85 0.23 148);
-  --chart-2: oklch(0.68 0.21 27);
-  --chart-3: oklch(0.68 0.015 155);
-  --chart-4: oklch(0.44 0.01 155);
-  --chart-5: oklch(0.25 0.012 155);
-  --radius: 0.375rem;
-  --sidebar: oklch(0.28 0.012 155);
-  --sidebar-foreground: oklch(0.96 0.005 155);
-  --sidebar-primary: oklch(0.85 0.23 148);
-  --sidebar-primary-foreground: oklch(0.22 0.01 155);
-  --sidebar-accent: oklch(0.35 0.015 155);
-  --sidebar-accent-foreground: oklch(0.96 0.005 155);
-  --sidebar-border: oklch(1 0 0 / 18%);
-  --sidebar-ring: oklch(0.85 0.23 148);
+  color-scheme: light;
+
+  /* Clean white base */
+  --background: oklch(0.99 0.002 240);
+  --foreground: oklch(0.12 0.02 250);
+
+  /* Card — barely-off-white with a cool tint */
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.12 0.02 250);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.12 0.02 250);
+
+  /* Electric cobalt blue — the platform's signal color */
+  --primary: oklch(0.52 0.24 262);
+  --primary-foreground: oklch(1 0 0);
+
+  /* Light blue-gray surface */
+  --secondary: oklch(0.95 0.008 240);
+  --secondary-foreground: oklch(0.25 0.02 250);
+  --muted: oklch(0.95 0.008 240);
+  --muted-foreground: oklch(0.52 0.015 250);
+  --accent: oklch(0.94 0.015 250);
+  --accent-foreground: oklch(0.20 0.02 250);
+
+  /* Signal red — live / alert state */
+  --destructive: oklch(0.58 0.24 25);
+
+  /* Crisp borders */
+  --border: oklch(0.88 0.008 240);
+  --input: oklch(0.90 0.008 240);
+  --ring: oklch(0.52 0.24 262);
+
+  /* Charts */
+  --chart-1: oklch(0.52 0.24 262);
+  --chart-2: oklch(0.58 0.24 25);
+  --chart-3: oklch(0.65 0.18 210);
+  --chart-4: oklch(0.75 0.12 145);
+  --chart-5: oklch(0.72 0.15 55);
+
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: oklch(0.97 0.004 240);
+  --sidebar-foreground: oklch(0.12 0.02 250);
+  --sidebar-primary: oklch(0.52 0.24 262);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.94 0.015 250);
+  --sidebar-accent-foreground: oklch(0.20 0.02 250);
+  --sidebar-border: oklch(0.88 0.008 240);
+  --sidebar-ring: oklch(0.52 0.24 262);
+
+  /* Platform accent — sky blue tint for subtle backgrounds */
+  --sky: oklch(0.94 0.04 240);
+  --sky-foreground: oklch(0.40 0.18 252);
 }
 
 @layer base {
@@ -94,38 +115,56 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply text-foreground;
-    background-color: oklch(0.14 0.014 22);
-    background-image:
-      /* Strong red glow — top left corner, like stadium lights over the field */
-      radial-gradient(ellipse 90% 60% at -10% -5%, oklch(0.68 0.21 27 / 18%) 0%, transparent 55%),
-      /* Secondary red bloom — lower right */
-      radial-gradient(ellipse 70% 55% at 110% 110%, oklch(0.68 0.21 27 / 10%) 0%, transparent 55%),
-      /* Green accent center-top — stadium floodlight */
-      radial-gradient(ellipse 100% 40% at 50% -5%, oklch(0.85 0.23 148 / 5%) 0%, transparent 60%),
-      /* Base: warm near-black with a touch of red-brown */
-      linear-gradient(170deg, oklch(0.17 0.018 30) 0%, oklch(0.13 0.012 22) 50%, oklch(0.15 0.016 30) 100%);
-    background-attachment: fixed;
-    position: relative;
+    @apply bg-background text-foreground;
   }
 
   ::selection {
-    background: color-mix(in oklch, var(--destructive) 65%, transparent);
-    color: var(--foreground);
+    background: oklch(0.52 0.24 262 / 0.15);
+    color: oklch(0.12 0.02 250);
   }
 }
 
-/* Blinking live indicator, terminal-cursor style */
+/* Blinking live indicator */
 @keyframes live-blink {
   0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.25;
-  }
+  100% { opacity: 1; }
+  50%  { opacity: 0.25; }
 }
 
 .live-dot {
   animation: live-blink 1.4s ease-in-out infinite;
+}
+
+/* Shimmer scan line for the Ask panel */
+@keyframes scan-line {
+  0%   { transform: translateY(-100%); }
+  100% { transform: translateY(400%); }
+}
+
+.scan-line {
+  animation: scan-line 3s linear infinite;
+}
+
+/* Subtle data-surface texture: adds depth without competing with content. */
+.data-grid {
+  background-image: linear-gradient(to right, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.52 0.24 262 / 0.045) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Horizontal news ticker */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot,
+  .scan-line {
+    animation: none;
+  }
+  /* Freeze the ticker; user can still scroll it manually */
+  [style*="ticker-scroll"] {
+    animation-play-state: paused !important;
+  }
 }

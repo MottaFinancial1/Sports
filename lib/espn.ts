@@ -23,9 +23,10 @@ export interface LeagueConfig {
 }
 
 export const LEAGUES: LeagueConfig[] = [
-  { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "baseball/mlb" },
-  // Triple-A (Gwinnett Stripers) comes from the MLB Stats API, not ESPN —
-  // path is unused; getTodaysGames routes this id to fetchStripers().
+  // MLB comes from the MLB Stats API (statsapi.mlb.com), not ESPN —
+  // ESPN blocks Vercel IPs. getTodaysGames routes "mlb" to fetchMLBGames().
+  { id: "mlb", label: "MLB", shortLabel: "MLB", category: "Baseball", path: "" },
+  // Triple-A (Omaha Storm Chasers) — also MLB Stats API.
   { id: "aaa", label: "Triple-A", shortLabel: "AAA", category: "Baseball", path: "" },
   { id: "nfl", label: "NFL", shortLabel: "NFL", category: "Football", path: "football/nfl" },
   {
@@ -86,6 +87,8 @@ export interface Competitor {
   winner?: boolean
   record?: string
   probablePitcher?: ProbablePitcher
+  // Tennis: individual set scores e.g. ["6", "4", "7"]
+  sets?: string[]
 }
 
 export type GameState = "pre" | "in" | "post"
@@ -106,9 +109,11 @@ export interface Game {
   venue?: string
   note?: string
   week?: number // NFL/NCAAF week number
+  round?: string // Tennis: e.g. "Round of 128", "Quarterfinals", "Final"
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
   leaders?: GameLeader[] // Star performers (populated for live games)
   situation?: GameSituation // Live at-bat situation (baseball only)
+  isToday?: boolean // true if the game date matches today (server local date)
 }
 
 export interface GameLeader {
@@ -193,6 +198,8 @@ interface EspnCompetitor {
   records?: { summary?: string }[]
   probables?: EspnProbable[]
   leaders?: EspnLeaderGroup[]
+  // Tennis: set-by-set scores
+  linescores?: { value?: number | string }[]
 }
 
 function mapProbablePitcher(c: EspnCompetitor): ProbablePitcher | undefined {
@@ -229,6 +236,10 @@ function extractBroadcasts(comp: EspnCompetition): string[] {
 function mapCompetitor(c: EspnCompetitor): Competitor {
   const team = c.team
   const athlete = c.athlete
+  const sets =
+    c.linescores && c.linescores.length > 0
+      ? c.linescores.map((s) => String(s.value ?? ""))
+      : undefined
   return {
     name: team?.displayName ?? athlete?.displayName ?? "TBD",
     shortName: team?.shortDisplayName ?? team?.abbreviation ?? athlete?.shortName ?? "TBD",
@@ -238,18 +249,41 @@ function mapCompetitor(c: EspnCompetitor): Competitor {
     winner: c.winner,
     record: c.records?.[0]?.summary,
     probablePitcher: mapProbablePitcher(c),
+    sets,
   }
 }
 
-async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard`
+/** Fetch with an AbortController timeout so a slow upstream never hangs the
+ *  Vercel serverless function past its execution limit. */
+async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), ms)
   try {
-    const res = await fetch(url, {
-      // Refresh every 60s so live scores stay current; the endpoint tracks
-      // the current day itself, so the slate rolls over automatically.
-      next: { revalidate: 60 },
+    return await fetch(url, {
+      cache: "no-store",
+      signal: controller.signal,
       headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
     })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/** Today's date as YYYYMMDD in the local (server) timezone — used to scope
+ *  the ESPN MLB scoreboard explicitly so it never returns yesterday's slate. */
+function todayESPN(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${y}${m}${day}`
+}
+
+async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
+  const dateParam = league.id === "mlb" ? `?dates=${todayESPN()}` : ""
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard${dateParam}`
+  try {
+    const res = await fetchWithTimeout(url)
     if (!res.ok) return []
     const data = (await res.json()) as EspnResponse
     const isFootball = league.id === "nfl" || league.id === "ncaaf"
@@ -274,8 +308,17 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
         const matchName = isTennis
           ? competitors.map((c) => c.shortName).join(" vs ")
           : (event.name ?? event.shortName ?? "")
+        // Tennis round from the competition note headline or event name
+        const tennisRound = isTennis
+          ? (comp.notes?.[0]?.headline ?? event.name ?? undefined)
+          : undefined
+
         games.push({
-          id: isTennis ? `${event.id}-${compIndex}` : event.id,
+          // Prefix with leagueId so identical ESPN event IDs from different leagues
+          // (e.g. MLS vs CONCACAF sharing the same event slug) don't collide as React keys.
+          id: isTennis
+            ? `${league.id}-${event.id}-${compIndex}`
+            : `${league.id}-${event.id}`,
           leagueId: league.id,
           leagueLabel: league.label,
           leagueShort: league.shortLabel,
@@ -288,7 +331,8 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
           competitors,
           broadcasts: extractBroadcasts(comp),
           venue: comp.venue?.fullName,
-          note: comp.notes?.[0]?.headline ?? (isTennis ? event.name : undefined),
+          note: isTennis ? event.name : (comp.notes?.[0]?.headline ?? undefined),
+          round: tennisRound,
           week: isFootball ? (event.week?.number ?? data.week?.number) : undefined,
           link:
             (event.links ?? []).find((l) => l.text === "Gamecast")?.href ??
@@ -363,9 +407,9 @@ function extractLeaders(comp: EspnCompetition): GameLeader[] | undefined {
   return leaders.length > 0 ? leaders : undefined
 }
 
-// ---------- Gwinnett Stripers (Triple-A) via the MLB Stats API ----------
+// ---------- Omaha Storm Chasers (Triple-A) via the MLB Stats API ----------
 
-const STRIPERS_TEAM_ID = 431 // Gwinnett Stripers, International League (AAA)
+const STORM_CHASERS_TEAM_ID = 541 // Omaha Storm Chasers, Pacific Coast League (AAA)
 
 interface StatsApiGame {
   gamePk: number
@@ -385,6 +429,61 @@ interface StatsApiSide {
   leagueRecord?: { wins?: number; losses?: number }
   score?: number
   probablePitcher?: { fullName?: string }
+}
+
+interface StatsApiLiveFeed {
+  liveData?: {
+    linescore?: {
+      balls?: number
+      strikes?: number
+      outs?: number
+      offense?: {
+        batter?: { fullName?: string }
+        first?: { fullName?: string }
+        second?: { fullName?: string }
+        third?: { fullName?: string }
+      }
+      defense?: {
+        pitcher?: { fullName?: string }
+      }
+    }
+  }
+}
+
+/** Enrich live baseball games (MLB/AAA) with the current at-bat situation by
+ *  hitting the MLB Stats API's live game feed. Only called for in-progress
+ *  games, and run in parallel with a short timeout so a slow/stuck feed
+ *  never blocks the rest of the scoreboard. */
+async function attachStatsApiSituations(games: Game[]): Promise<void> {
+  const live = games.filter((g) => g.state === "in")
+  await Promise.all(
+    live.map(async (g) => {
+      const gamePk = g.id.split("-").pop()
+      if (!gamePk) return
+      try {
+        const res = await fetchWithTimeout(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, 4000)
+        if (!res.ok) return
+        const data = (await res.json()) as StatsApiLiveFeed
+        const ls = data.liveData?.linescore
+        if (!ls) return
+        const offense = ls.offense
+        const pitcherName = ls.defense?.pitcher?.fullName
+        const batterName = offense?.batter?.fullName
+        g.situation = {
+          balls: ls.balls ?? 0,
+          strikes: ls.strikes ?? 0,
+          outs: ls.outs ?? 0,
+          onFirst: Boolean(offense?.first),
+          onSecond: Boolean(offense?.second),
+          onThird: Boolean(offense?.third),
+          pitcher: pitcherName ? { name: pitcherName, shortName: pitcherName } : undefined,
+          batter: batterName ? { name: batterName, shortName: batterName } : undefined,
+        }
+      } catch {
+        // Leave situation unset for this game — the card still renders fine without it.
+      }
+    }),
+  )
 }
 
 function mapStatsApiState(abstract?: string): GameState {
@@ -411,15 +510,12 @@ function mapStatsApiSide(side: StatsApiSide | undefined, isHome: boolean, won?: 
   }
 }
 
-async function fetchStripers(): Promise<Game[]> {
+async function fetchStormChasers(): Promise<Game[]> {
   // No date param: the schedule endpoint defaults to today, so it rolls over
   // to the new day automatically, same as the ESPN scoreboards.
-  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STRIPERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=11&teamId=${STORM_CHASERS_TEAM_ID}&hydrate=team,linescore,broadcasts(all),probablePitcher`
   try {
-    const res = await fetch(url, {
-      next: { revalidate: 60 },
-      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
-    })
+    const res = await fetchWithTimeout(url)
     if (!res.ok) return []
     const data = (await res.json()) as { dates?: { games?: StatsApiGame[] }[] }
     const games: Game[] = []
@@ -457,6 +553,58 @@ async function fetchStripers(): Promise<Game[]> {
         })
       }
     }
+    await attachStatsApiSituations(games)
+    return games
+  } catch {
+    return []
+  }
+}
+
+// ---------- MLB (Major League) via the MLB Stats API ----------
+
+async function fetchMLBGames(): Promise<Game[]> {
+  const today = todayESPN()
+  const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today.slice(0,4)}-${today.slice(4,6)}-${today.slice(6,8)}&hydrate=team,linescore,broadcasts(all),probablePitcher`
+  try {
+    const res = await fetchWithTimeout(url)
+    if (!res.ok) return []
+    const data = (await res.json()) as { dates?: { games?: StatsApiGame[] }[] }
+    const games: Game[] = []
+    for (const date of data.dates ?? []) {
+      for (const g of date.games ?? []) {
+        const state = mapStatsApiState(g.status?.abstractGameState)
+        const awayScore = g.teams?.away?.score
+        const homeScore = g.teams?.home?.score
+        const awayWon = state === "post" && awayScore !== undefined && homeScore !== undefined && awayScore > homeScore
+        const homeWon = state === "post" && awayScore !== undefined && homeScore !== undefined && homeScore > awayScore
+        const away = mapStatsApiSide(g.teams?.away, false, state === "post" ? awayWon : undefined)
+        const home = mapStatsApiSide(g.teams?.home, true, state === "post" ? homeWon : undefined)
+        const statusDetail =
+          state === "in" && g.linescore?.currentInningOrdinal
+            ? `${g.linescore.inningState ?? ""} ${g.linescore.currentInningOrdinal}`.trim()
+            : (g.status?.detailedState ?? "")
+        const broadcasts = Array.from(
+          new Set((g.broadcasts ?? []).map((b) => b.name ?? b.callSign).filter((n): n is string => Boolean(n))),
+        )
+        games.push({
+          id: `mlb-${g.gamePk}`,
+          leagueId: "mlb",
+          leagueLabel: "MLB",
+          leagueShort: "MLB",
+          category: "Baseball",
+          name: `${away.name} at ${home.name}`,
+          shortName: `${away.shortName} @ ${home.shortName}`,
+          date: g.gameDate ?? "",
+          state,
+          statusDetail,
+          competitors: [away, home],
+          broadcasts,
+          venue: g.venue?.name,
+          link: `https://www.mlb.com/gameday/${g.gamePk}`,
+        })
+      }
+    }
+    await attachStatsApiSituations(games)
     return games
   } catch {
     return []
@@ -466,7 +614,7 @@ async function fetchStripers(): Promise<Game[]> {
 // ---------- Favorites ----------
 
 // Games featuring these teams are pinned in a Favorites section at the top.
-export const FAVORITE_TEAMS = ["Los Angeles Angels", "Boston Red Sox", "Gwinnett Stripers"]
+export const FAVORITE_TEAMS = ["Los Angeles Angels", "Kansas City Royals", "Boston Red Sox", "Omaha Storm Chasers"]
 
 export function isFavoriteGame(game: Game): boolean {
   return game.competitors.some((c) => FAVORITE_TEAMS.some((fav) => c.name.includes(fav) || fav.includes(c.name)))
@@ -656,19 +804,301 @@ export async function getStatcastHighlights(): Promise<StatcastHighlight[]> {
   }
 }
 
+// ---------- F1 Standings (driver + constructor) ----------
+
+export interface F1Driver {
+  position: number
+  name: string
+  shortName: string
+  team: string
+  teamShort: string
+  points: number
+  wins: number
+  logo?: string // constructor logo
+}
+
+export interface F1Constructor {
+  position: number
+  name: string
+  shortName: string
+  points: number
+  wins: number
+  logo?: string
+}
+
+interface EspnStandingsEntry {
+  athlete?: { displayName?: string; shortName?: string }
+  team?: { displayName?: string; shortDisplayName?: string; abbreviation?: string; logos?: { href?: string }[] }
+  stats?: { name?: string; value?: number | string; displayValue?: string }[]
+}
+
+interface EspnStandingsGroup {
+  standings?: { entries?: EspnStandingsEntry[] }
+  entries?: EspnStandingsEntry[]
+}
+
+interface EspnStandingsResponse {
+  standings?: {
+    entries?: EspnStandingsEntry[]
+    groups?: EspnStandingsGroup[]
+  }
+  children?: { standings?: { entries?: EspnStandingsEntry[] } }[]
+}
+
+function statVal(stats: EspnStandingsEntry["stats"], name: string): number {
+  const s = (stats ?? []).find((s) => s.name === name)
+  const v = s?.value ?? s?.displayValue
+  return v !== undefined ? Number(v) : 0
+}
+
+export async function getF1Standings(): Promise<{ drivers: F1Driver[]; constructors: F1Constructor[] }> {
+  const [driverRes, constructorRes] = await Promise.all([
+    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2026&type=driver", {
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    }),
+    fetch("https://site.api.espn.com/apis/site/v2/sports/racing/f1/standings?season=2026&type=constructor", {
+      next: { revalidate: 300 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    }),
+  ])
+
+  const drivers: F1Driver[] = []
+  const constructors: F1Constructor[] = []
+
+  if (driverRes.ok) {
+    const data = (await driverRes.json()) as EspnStandingsResponse
+    const entries =
+      data.standings?.entries ??
+      data.standings?.groups?.flatMap((g) => g.standings?.entries ?? g.entries ?? []) ??
+      data.children?.flatMap((c) => c.standings?.entries ?? []) ??
+      []
+    entries.forEach((e, i) => {
+      const name = e.athlete?.displayName ?? e.team?.displayName ?? ""
+      if (!name) return
+      drivers.push({
+        position: i + 1,
+        name,
+        shortName: e.athlete?.shortName ?? e.team?.shortDisplayName ?? name,
+        team: e.team?.displayName ?? "",
+        teamShort: e.team?.abbreviation ?? e.team?.shortDisplayName ?? "",
+        points: statVal(e.stats, "points") || statVal(e.stats, "pts") || statVal(e.stats, "totalPoints"),
+        wins: statVal(e.stats, "wins") || statVal(e.stats, "w"),
+        logo: e.team?.logos?.[0]?.href,
+      })
+    })
+  }
+
+  if (constructorRes.ok) {
+    const data = (await constructorRes.json()) as EspnStandingsResponse
+    const entries =
+      data.standings?.entries ??
+      data.standings?.groups?.flatMap((g) => g.standings?.entries ?? g.entries ?? []) ??
+      data.children?.flatMap((c) => c.standings?.entries ?? []) ??
+      []
+    entries.forEach((e, i) => {
+      const name = e.team?.displayName ?? ""
+      if (!name) return
+      constructors.push({
+        position: i + 1,
+        name,
+        shortName: e.team?.shortDisplayName ?? e.team?.abbreviation ?? name,
+        points: statVal(e.stats, "points") || statVal(e.stats, "pts") || statVal(e.stats, "totalPoints"),
+        wins: statVal(e.stats, "wins") || statVal(e.stats, "w"),
+        logo: e.team?.logos?.[0]?.href,
+      })
+    })
+  }
+
+  return { drivers, constructors }
+}
+
+// ---------- PGA Leaderboard ----------
+
+export interface PGAPlayer {
+  position: number
+  name: string
+  shortName: string
+  score: string // e.g. "-12" or "E"
+  today: string // today's round score
+  thru: string // e.g. "F" or "12"
+  isBigName: boolean
+  logo?: string
+}
+
+// Top names to prioritize in the leaderboard
+const PGA_BIG_NAMES = new Set([
+  "Scottie Scheffler", "Rory McIlroy", "Jon Rahm", "Brooks Koepka", "Xander Schauffele",
+  "Patrick Cantlay", "Viktor Hovland", "Collin Morikawa", "Justin Thomas", "Jordan Spieth",
+  "Dustin Johnson", "Tiger Woods", "Phil Mickelson", "Bryson DeChambeau", "Tony Finau",
+  "Shane Lowry", "Tommy Fleetwood", "Ludvig Aberg", "Hideki Matsuyama", "Max Homa",
+])
+
+export async function getPGALeaderboard(): Promise<PGAPlayer[]> {
+  try {
+    // ESPN only exposes golf data via /scoreboard (not /leaderboard).
+    // The scoreboard returns competitors sorted by `order` (leaderboard position).
+    // `score` is a raw integer (strokes vs par), `linescores` are per-round scores.
+    const res = await fetch("https://site.api.espn.com/apis/site/v2/sports/golf/pga/scoreboard", {
+      next: { revalidate: 120 },
+      headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      events?: {
+        name?: string
+        competitions?: {
+          status?: { type?: { completed?: boolean; description?: string } }
+          competitors?: {
+            order?: number
+            athlete?: { displayName?: string; shortName?: string }
+            score?: number | string
+            linescores?: { displayValue?: string; value?: number | string }[]
+          }[]
+        }[]
+      }[]
+    }
+
+    const competitors = data.events?.[0]?.competitions?.[0]?.competitors ?? []
+    const players: PGAPlayer[] = competitors.slice(0, 70).map((c) => {
+      const name = c.athlete?.displayName ?? "Unknown"
+      const rawScore = c.score
+      // Format score as "+N", "-N", or "E"
+      const scoreNum = rawScore !== undefined && rawScore !== null ? Number(rawScore) : null
+      const scoreStr =
+        scoreNum === null
+          ? "E"
+          : scoreNum === 0
+            ? "E"
+            : scoreNum > 0
+              ? `+${scoreNum}`
+              : `${scoreNum}`
+      // Latest round score from last linescore entry
+      const ls = c.linescores ?? []
+      const lastRound = ls[ls.length - 1]?.displayValue ?? ls[ls.length - 1]?.value?.toString() ?? "-"
+
+      return {
+        position: c.order ?? 99,
+        name,
+        shortName: c.athlete?.shortName ?? name,
+        score: scoreStr,
+        today: lastRound,
+        thru: "-",
+        isBigName: PGA_BIG_NAMES.has(name),
+      }
+    })
+
+    // Sort by actual leaderboard position, but always surface big names within top 25
+    return players.sort((a, b) => {
+      if (a.isBigName && !b.isBigName && b.position > 20) return -1
+      if (b.isBigName && !a.isBigName && a.position > 20) return 1
+      return a.position - b.position
+    })
+  } catch {
+    return []
+  }
+}
+
+// ---------- MLB Standings (live via MLB Stats API) ----------
+
+export interface MLBStandingTeam {
+  teamId: number
+  name: string
+  shortName: string
+  abbreviation: string
+  division: string
+  wins: number
+  losses: number
+  pct: string
+  gb: string
+  logo: string
+}
+
+export async function getMLBStandings(): Promise<MLBStandingTeam[]> {
+  try {
+    const res = await fetch(
+      "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2026&standingsTypes=regularSeason&hydrate=team",
+      {
+        next: { revalidate: 300 },
+        headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+      },
+    )
+    if (!res.ok) return []
+    const data = (await res.json()) as {
+      records?: {
+        division?: { id?: number; nameShort?: string }
+        teamRecords?: {
+          team?: { id?: number; name?: string; teamName?: string; abbreviation?: string; clubName?: string }
+          wins?: number
+          losses?: number
+          winningPercentage?: string
+          gamesBack?: string
+          divisionRank?: string
+        }[]
+      }[]
+    }
+
+    const divisionNames: Record<number, string> = {
+      200: "AL West", 201: "AL East", 202: "AL Central",
+      203: "NL West", 204: "NL East", 205: "NL Central",
+    }
+
+    const teams: MLBStandingTeam[] = []
+    for (const record of data.records ?? []) {
+      const divId = record.division?.id ?? 0
+      const division = divisionNames[divId] ?? record.division?.nameShort ?? "Unknown"
+      for (const tr of record.teamRecords ?? []) {
+        const teamId = tr.team?.id ?? 0
+        teams.push({
+          teamId,
+          name: tr.team?.name ?? "Unknown",
+          shortName: tr.team?.teamName ?? tr.team?.clubName ?? tr.team?.abbreviation ?? "???",
+          abbreviation: tr.team?.abbreviation ?? "???",
+          division,
+          wins: tr.wins ?? 0,
+          losses: tr.losses ?? 0,
+          pct: tr.winningPercentage ?? ".000",
+          gb: tr.gamesBack ?? "-",
+          logo: teamId ? `https://www.mlbstatic.com/team-logos/${teamId}.svg` : "",
+        })
+      }
+    }
+    return teams
+  } catch {
+    return []
+  }
+}
+
 export interface SportsData {
   games: Game[]
   news: NewsArticle[]
   statcast: StatcastHighlight[]
+  f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
+  pgaLeaderboard: PGAPlayer[]
+  mlbStandings: MLBStandingTeam[]
   fetchedAt: string
 }
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const [results, news, statcast] = await Promise.all([
-    Promise.all(LEAGUES.map((league) => (league.id === "aaa" ? fetchStripers() : fetchLeague(league)))),
+  const [results, news, statcast, f1Standings, pgaLeaderboard, mlbStandings] = await Promise.all([
+    Promise.all(LEAGUES.map((league) => {
+      if (league.id === "aaa") return fetchStormChasers()
+      if (league.id === "mlb") return fetchMLBGames()
+      return fetchLeague(league)
+    })),
     getTopNews(),
     getStatcastHighlights(),
+    getF1Standings(),
+    getPGALeaderboard(),
+    getMLBStandings(),
   ])
-  const games = results.flat()
-  return { games, news, statcast, fetchedAt: new Date().toISOString() }
+  // Stamp isToday: compare each game's date against today's YYYYMMDD string
+  // so the client can sort/filter without re-parsing dates in multiple places.
+  const todayStr = todayESPN() // "YYYYMMDD"
+  const todayYMD = `${todayStr.slice(0, 4)}-${todayStr.slice(4, 6)}-${todayStr.slice(6, 8)}`
+  const games = results.flat().map((g) => ({
+    ...g,
+    isToday: g.state === "in" || g.state === "post" || g.date.startsWith(todayYMD),
+  }))
+  return { games, news, statcast, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt: new Date().toISOString() }
 }

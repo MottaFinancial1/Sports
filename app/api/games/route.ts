@@ -9,8 +9,9 @@ export async function GET() {
   const data = await getTodaysGames()
   return NextResponse.json(data, {
     headers: {
-      // Let shared caches (CDN) serve for up to 60s with SWR semantics.
-      "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
+      // Never let the CDN cache this — an empty slate (ESPN timeout) must
+      // never be served stale. The client polls every 60s itself.
+      "Cache-Control": "no-store",
     },
   })
 }
