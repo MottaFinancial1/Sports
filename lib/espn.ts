@@ -67,6 +67,17 @@ export interface ProbablePitcher {
   era?: string // e.g. "2.13"
 }
 
+export interface GameSituation {
+  balls: number
+  strikes: number
+  outs: number
+  onFirst: boolean
+  onSecond: boolean
+  onThird: boolean
+  pitcher?: { name: string; shortName: string; era?: string; pitchCount?: number }
+  batter?: { name: string; shortName: string; avg?: string } // avg = today's line e.g. "1-3"
+}
+
 export interface Competitor {
   name: string
   shortName: string
@@ -101,6 +112,7 @@ export interface Game {
   round?: string // Tennis: e.g. "Round of 128", "Quarterfinals", "Final"
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
   leaders?: GameLeader[] // Star performers (populated for live games)
+  situation?: GameSituation // Live at-bat situation (baseball only)
   isToday?: boolean // true if the game date matches today (server local date)
 }
 
@@ -130,6 +142,18 @@ interface EspnEvent {
   groupings?: { competitions?: EspnCompetition[] }[]
 }
 
+interface EspnSituationPlayer {
+  playerId?: number
+  pitchCount?: number
+  summary?: string  // e.g. "0.0 IP, 0 ER" for pitchers, "0-2" for batters
+  athlete?: {
+    displayName?: string
+    shortName?: string
+    headshot?: string
+    position?: string
+  }
+}
+
 interface EspnCompetition {
   date?: string
   venue?: { fullName?: string }
@@ -138,6 +162,17 @@ interface EspnCompetition {
   notes?: { headline?: string }[]
   status?: { type?: { state?: string; shortDetail?: string; detail?: string } }
   competitors?: EspnCompetitor[]
+  situation?: {
+    balls?: number
+    strikes?: number
+    outs?: number
+    onFirst?: boolean
+    onSecond?: boolean
+    onThird?: boolean
+    pitcher?: EspnSituationPlayer
+    batter?: EspnSituationPlayer
+    lastPlay?: { text?: string }
+  }
 }
 
 interface EspnProbable {
@@ -304,12 +339,47 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
             (event.links ?? []).find((l) => l.text === "Box Score")?.href ??
             event.links?.[0]?.href,
           leaders: state === "in" ? extractLeaders(comp) : undefined,
+          situation: state === "in" && league.category === "Baseball" ? extractSituation(comp) : undefined,
         })
       })
     }
     return games
   } catch {
     return []
+  }
+}
+
+function extractSituation(comp: EspnCompetition): GameSituation | undefined {
+  const s = comp.situation
+  if (!s) return undefined
+
+  // Parse ERA from pitcher summary string like "0.0 IP, 0 ER, 0 H, 0 BB"
+  // and batter summary like "1-3" (hits-ABs)
+  const pitcherAthlete = s.pitcher?.athlete
+  const batterAthlete = s.batter?.athlete
+
+  return {
+    balls: s.balls ?? 0,
+    strikes: s.strikes ?? 0,
+    outs: s.outs ?? 0,
+    onFirst: s.onFirst ?? false,
+    onSecond: s.onSecond ?? false,
+    onThird: s.onThird ?? false,
+    pitcher: pitcherAthlete?.displayName
+      ? {
+          name: pitcherAthlete.displayName,
+          shortName: pitcherAthlete.shortName ?? pitcherAthlete.displayName,
+          era: undefined, // summary is per-game stats, ERA not included
+          pitchCount: s.pitcher?.pitchCount,
+        }
+      : undefined,
+    batter: batterAthlete?.displayName
+      ? {
+          name: batterAthlete.displayName,
+          shortName: batterAthlete.shortName ?? batterAthlete.displayName,
+          avg: s.batter?.summary ?? undefined, // e.g. "1-3" today
+        }
+      : undefined,
   }
 }
 
@@ -359,6 +429,61 @@ interface StatsApiSide {
   leagueRecord?: { wins?: number; losses?: number }
   score?: number
   probablePitcher?: { fullName?: string }
+}
+
+interface StatsApiLiveFeed {
+  liveData?: {
+    linescore?: {
+      balls?: number
+      strikes?: number
+      outs?: number
+      offense?: {
+        batter?: { fullName?: string }
+        first?: { fullName?: string }
+        second?: { fullName?: string }
+        third?: { fullName?: string }
+      }
+      defense?: {
+        pitcher?: { fullName?: string }
+      }
+    }
+  }
+}
+
+/** Enrich live baseball games (MLB/AAA) with the current at-bat situation by
+ *  hitting the MLB Stats API's live game feed. Only called for in-progress
+ *  games, and run in parallel with a short timeout so a slow/stuck feed
+ *  never blocks the rest of the scoreboard. */
+async function attachStatsApiSituations(games: Game[]): Promise<void> {
+  const live = games.filter((g) => g.state === "in")
+  await Promise.all(
+    live.map(async (g) => {
+      const gamePk = g.id.split("-").pop()
+      if (!gamePk) return
+      try {
+        const res = await fetchWithTimeout(`https://statsapi.mlb.com/api/v1.1/game/${gamePk}/feed/live`, 4000)
+        if (!res.ok) return
+        const data = (await res.json()) as StatsApiLiveFeed
+        const ls = data.liveData?.linescore
+        if (!ls) return
+        const offense = ls.offense
+        const pitcherName = ls.defense?.pitcher?.fullName
+        const batterName = offense?.batter?.fullName
+        g.situation = {
+          balls: ls.balls ?? 0,
+          strikes: ls.strikes ?? 0,
+          outs: ls.outs ?? 0,
+          onFirst: Boolean(offense?.first),
+          onSecond: Boolean(offense?.second),
+          onThird: Boolean(offense?.third),
+          pitcher: pitcherName ? { name: pitcherName, shortName: pitcherName } : undefined,
+          batter: batterName ? { name: batterName, shortName: batterName } : undefined,
+        }
+      } catch {
+        // Leave situation unset for this game — the card still renders fine without it.
+      }
+    }),
+  )
 }
 
 function mapStatsApiState(abstract?: string): GameState {
@@ -428,6 +553,7 @@ async function fetchStormChasers(): Promise<Game[]> {
         })
       }
     }
+    await attachStatsApiSituations(games)
     return games
   } catch {
     return []
@@ -478,6 +604,7 @@ async function fetchMLBGames(): Promise<Game[]> {
         })
       }
     }
+    await attachStatsApiSituations(games)
     return games
   } catch {
     return []
