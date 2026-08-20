@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, Zap } from "lucide-react"
 import { isFavoriteGame, type Game, type LeagueCategory } from "@/lib/espn"
+import { isAlwaysSurfaceCategory, isCategoryInSeason } from "@/lib/season"
 
 export type CategoryStatus = "live" | "soon" | "scheduled" | "done"
 
@@ -213,9 +214,20 @@ export function SportSpotlight({
       priority,
       now,
     )
-    return ordered
-      .filter((c) => c.status === "live" || c.status === "soon")
-      .slice(0, 2)
+
+    // Baseball and the major European soccer leagues always get a spotlight
+    // slot while in season, even if another sport happens to be live right
+    // now — they're the priority sports for this app, not just whatever's
+    // live at the moment.
+    const pinned = ordered.filter(
+      (c) => isAlwaysSurfaceCategory(c.category) && isCategoryInSeason(c.category, new Date(now)) && c.status !== "done",
+    )
+    const rest = ordered.filter(
+      (c) => !pinned.some((p) => p.category === c.category) && (c.status === "live" || c.status === "soon"),
+    )
+
+    return [...pinned, ...rest]
+      .slice(0, 4)
       .map((c) => ({ ...c, games: byCategory.get(c.category)! }))
   }, [games, priority, now])
 

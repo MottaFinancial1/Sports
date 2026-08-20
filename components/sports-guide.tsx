@@ -25,18 +25,9 @@ import {
   type StatcastHighlight,
 } from "@/lib/espn"
 import { getTeamViews, gameViewScore, type TeamViewMap } from "@/lib/team-views"
+import { getSeasonalCategoryOrder } from "@/lib/season"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
-
-const CATEGORY_ORDER: LeagueCategory[] = [
-  "Baseball",
-  "Football",
-  "Soccer",
-  "Motorsport",
-  "Golf",
-  "Tennis",
-  "Basketball",
-]
 
 type Filter = "all" | "live" | string
 
@@ -79,6 +70,11 @@ export function SportsGuide({
   const [today, setToday] = useState<string>("")
   const [updated, setUpdated] = useState<string>("")
   const [teamViews, setTeamViews] = useState<TeamViewMap>({})
+
+  // Sport priority is season-aware: baseball and the major European soccer
+  // leagues are pinned to the front whenever they're in season, ahead of
+  // whatever else happens to be in season or live.
+  const CATEGORY_ORDER = useMemo<LeagueCategory[]>(() => getSeasonalCategoryOrder(), [])
 
   useEffect(() => {
     setTeamViews(getTeamViews())
