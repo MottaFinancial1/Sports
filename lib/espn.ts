@@ -36,7 +36,15 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Football",
     path: "football/college-football",
   },
+  // Soccer leagues are ordered by priority: the top 5 European domestic
+  // leagues first (Premier League, La Liga, Bundesliga, Serie A, Ligue 1),
+  // then the Champions League, with MLS deliberately last — it's shown but
+  // never prioritized ahead of the major European leagues.
   { id: "epl", label: "Premier League", shortLabel: "EPL", category: "Soccer", path: "soccer/eng.1" },
+  { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
+  { id: "bundesliga", label: "Bundesliga", shortLabel: "Bundesliga", category: "Soccer", path: "soccer/ger.1" },
+  { id: "seriea", label: "Serie A", shortLabel: "Serie A", category: "Soccer", path: "soccer/ita.1" },
+  { id: "ligue1", label: "Ligue 1", shortLabel: "Ligue 1", category: "Soccer", path: "soccer/fra.1" },
   {
     id: "ucl",
     label: "Champions League",
@@ -44,7 +52,6 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Soccer",
     path: "soccer/uefa.champions",
   },
-  { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
   { id: "mls", label: "MLS", shortLabel: "MLS", category: "Soccer", path: "soccer/usa.1" },
   { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Motorsport", path: "racing/f1" },
   { id: "pga", label: "PGA Tour", shortLabel: "PGA", category: "Golf", path: "golf/pga" },
