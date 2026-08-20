@@ -36,7 +36,15 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Football",
     path: "football/college-football",
   },
+  // Soccer leagues are ordered by priority: the top 5 European domestic
+  // leagues first (Premier League, La Liga, Bundesliga, Serie A, Ligue 1),
+  // then the Champions League, with MLS deliberately last — it's shown but
+  // never prioritized ahead of the major European leagues.
   { id: "epl", label: "Premier League", shortLabel: "EPL", category: "Soccer", path: "soccer/eng.1" },
+  { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
+  { id: "bundesliga", label: "Bundesliga", shortLabel: "Bundesliga", category: "Soccer", path: "soccer/ger.1" },
+  { id: "seriea", label: "Serie A", shortLabel: "Serie A", category: "Soccer", path: "soccer/ita.1" },
+  { id: "ligue1", label: "Ligue 1", shortLabel: "Ligue 1", category: "Soccer", path: "soccer/fra.1" },
   {
     id: "ucl",
     label: "Champions League",
@@ -44,7 +52,6 @@ export const LEAGUES: LeagueConfig[] = [
     category: "Soccer",
     path: "soccer/uefa.champions",
   },
-  { id: "laliga", label: "La Liga", shortLabel: "La Liga", category: "Soccer", path: "soccer/esp.1" },
   { id: "mls", label: "MLS", shortLabel: "MLS", category: "Soccer", path: "soccer/usa.1" },
   { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Motorsport", path: "racing/f1" },
   { id: "pga", label: "PGA Tour", shortLabel: "PGA", category: "Golf", path: "golf/pga" },
@@ -101,7 +108,7 @@ export interface Game {
   round?: string // Tennis: e.g. "Round of 128", "Quarterfinals", "Final"
   link?: string // Live stats / box score page (ESPN Gamecast or MiLB Gameday)
   leaders?: GameLeader[] // Star performers (populated for live games)
-  isToday?: boolean // true if the game date matches today (server local date)
+  isToday?: boolean // true if the game date matches today (US Eastern date)
 }
 
 export interface GameLeader {
@@ -234,13 +241,22 @@ async function fetchWithTimeout(url: string, ms = 8000): Promise<Response> {
   }
 }
 
-/** Today's date as YYYYMMDD in the local (server) timezone — used to scope
- *  the ESPN MLB scoreboard explicitly so it never returns yesterday's slate. */
+/** Today's date as YYYYMMDD in US Eastern time — the relevant "sports day"
+ *  for MLB/NFL/NBA. Using the server's local timezone (often UTC in cloud
+ *  environments) rolls the calendar date over mid-evening ET, which cuts
+ *  live night games out of "today" entirely and makes it look like nothing
+ *  is happening in baseball while soccer (fetched without a date param)
+ *  keeps showing live matches. Anchoring to America/New_York fixes that. */
 function todayESPN(): string {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, "0")
-  const day = String(d.getDate()).padStart(2, "0")
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date())
+  const y = parts.find((p) => p.type === "year")!.value
+  const m = parts.find((p) => p.type === "month")!.value
+  const day = parts.find((p) => p.type === "day")!.value
   return `${y}${m}${day}`
 }
 

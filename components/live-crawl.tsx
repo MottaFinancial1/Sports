@@ -14,8 +14,11 @@ interface CrawlItem {
 
 const SPORT_ORDER = ["Baseball", "Football", "Basketball", "Soccer", "Motorsport", "Golf", "Tennis"]
 
-// European soccer leagues (MLS is excluded — it's not restricted to this-week only)
-const EU_SOCCER_IDS = new Set(["epl", "ucl", "laliga"])
+// Soccer leagues restricted to "this week's fixtures only" — the top 5
+// European domestic leagues plus the Champions League, and MLS. MLS is
+// included here (not exempted) so it never gets more ticker visibility
+// than the major European leagues.
+const WEEKLY_SOCCER_IDS = new Set(["epl", "laliga", "bundesliga", "seriea", "ligue1", "ucl", "mls"])
 
 // Tennis rounds that signal top players are still in the draw
 const TENNIS_LATE_ROUNDS = new Set([
@@ -42,8 +45,8 @@ function isThisCalendarWeek(date: Date): boolean {
 function passesTickerRules(g: Game): boolean {
   const gameDate = new Date(g.date)
 
-  // European soccer: only show if the match is in the current calendar week
-  if (EU_SOCCER_IDS.has(g.leagueId)) {
+  // Soccer: only show if the match is in the current calendar week
+  if (WEEKLY_SOCCER_IDS.has(g.leagueId)) {
     return isThisCalendarWeek(gameDate)
   }
 
