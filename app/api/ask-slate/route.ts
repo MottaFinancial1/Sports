@@ -7,7 +7,7 @@ import { getGameVibe } from '@/lib/game-vibe'
 // false, the webSearch tool is not registered at all — the model is told
 // plainly that live news access isn't wired up, instead of pretending to
 // search and returning a canned "check ESPN" non-answer.
-const HAS_SEARCH_API = Boolean(process.env.BRAVE_SEARCH_API_KEY)
+const HAS_SEARCH_API = Boolean(process.env.PERPLEXITY_API_KEY)
 
 // AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
 // Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
@@ -219,7 +219,7 @@ export async function POST(req: Request) {
         },
       }),
 
-      // Only registered when BRAVE_SEARCH_API_KEY is actually configured.
+      // Only registered when PERPLEXITY_API_KEY is actually configured.
       // Without a key, this tool is omitted entirely rather than being called
       // and silently returning a canned "check ESPN" string — the model is
       // told in the system prompt that this capability doesn't exist yet.
@@ -227,7 +227,7 @@ export async function POST(req: Request) {
         ? {
             webSearch: tool({
               description:
-                'Search live sports platforms, major news outlets, and social platforms (X/Twitter, Reddit) for real-time news, injury reports, trades, rumors, and analysis. Use for anything not covered by searchSchedule/findNextGame/getStandings. Pick a scope: "all" (default, sports + news + social), "sports", "news", "social" (X/Reddit buzz & insider reports), or "open" (unrestricted whole-web search). Use "social" or "open" for breaking rumors and insider chatter.',
+                'Search the live web (via Perplexity, with citations) across sports platforms, major news outlets, and social platforms (X/Twitter, Reddit) for real-time news, injury reports, trades, rumors, and analysis. Returns a synthesized, cited answer — not raw links. Use for anything not covered by searchSchedule/findNextGame/getStandings. Pick a scope: "all" (default, sports + news + social), "sports", "news", "social" (X/Reddit buzz & insider reports), or "open" (unrestricted whole-web search). Use "social" or "open" for breaking rumors and insider chatter.',
               inputSchema: z.object({
                 query: z.string().describe('Specific sports search query'),
                 scope: z
@@ -248,62 +248,58 @@ export async function POST(req: Request) {
                   .describe('How recent results must be. Defaults to "week". Use "day" for breaking news, "any" for historical/stats.'),
               }),
               execute: async ({ query, scope, sites, recency }) => {
-                // Brave's query string has a hard limit (~2048 chars). site: filters
-                // blow past it quickly, so we keep the OR-list very short (≤6 domains)
-                // and for "all" / "open" scopes we simply run an unrestricted search
-                // (Brave already favors high-authority sports domains without filters).
+                // Perplexity's search_domain_filter accepts up to 20 domains, but we
+                // keep the list short and high-signal per scope for relevance.
                 let targetSites: string[] | null
                 if (sites?.length) {
-                  // Caller-supplied list: honour it but cap at 5 to stay under the limit.
-                  targetSites = sites.slice(0, 5)
+                  targetSites = sites.slice(0, 10)
                 } else {
                   switch (scope) {
                     case 'sports':
-                      // Pick the 6 highest-signal sports domains only.
                       targetSites = ['espn.com', 'theathletic.com', 'cbssports.com', 'bleacherreport.com', 'sportingnews.com', 'si.com']
                       break
                     case 'news':
                       targetSites = ['apnews.com', 'reuters.com', 'nytimes.com', 'washingtonpost.com', 'theguardian.com', 'usatoday.com']
                       break
                     case 'social':
-                      // X (twitter.com) and Reddit — short list, no length issue.
                       targetSites = ['x.com', 'twitter.com', 'reddit.com']
                       break
                     case 'open':
                     case 'all':
                     default:
-                      // No site filter — Brave returns the best results across the web
-                      // which naturally surfaces ESPN, The Athletic, wire services, X, etc.
+                      // No domain filter — Perplexity's own ranking already favors
+                      // high-authority sources and surfaces ESPN, wire services, etc.
                       targetSites = null
                       break
                   }
                 }
 
-                // Build a concise site filter (≤6 domains keeps the URL well under 500 chars).
-                const siteFilter = targetSites && targetSites.length > 0
-                  ? ` (${targetSites.map((s) => `site:${s}`).join(' OR ')})`
-                  : ''
-                const searchQuery = `${query}${siteFilter}`
-
-                const freshnessMap: Record<string, string> = { day: 'pd', week: 'pw', month: 'pm' }
-                const freshnessParam =
-                  recency && recency !== 'any' && freshnessMap[recency]
-                    ? `&freshness=${freshnessMap[recency]}`
-                    : recency === 'any'
-                      ? ''
-                      : '&freshness=pw'
+                const recencyMap: Record<string, string> = { day: 'day', week: 'week', month: 'month' }
+                const searchRecencyFilter = recency && recency !== 'any' ? recencyMap[recency] : 'week'
 
                 const scopeLabel = targetSites ? targetSites.join(', ') : 'the open web'
 
                 try {
-                  const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
-                  const res = await fetch(searchUrl, {
+                  const res = await fetch('https://api.perplexity.ai/chat/completions', {
+                    method: 'POST',
                     headers: {
-                      'Accept': 'application/json',
-                      'Accept-Encoding': 'gzip',
-                      'X-Subscription-Token': process.env.BRAVE_SEARCH_API_KEY ?? '',
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY ?? ''}`,
                     },
-                    next: { revalidate: 60 },
+                    body: JSON.stringify({
+                      model: 'sonar',
+                      messages: [
+                        {
+                          role: 'system',
+                          content:
+                            'You are a sports research assistant. Answer the query concisely using only current, verifiable information. Include specific facts, numbers, and dates. Keep the answer under 150 words.',
+                        },
+                        { role: 'user', content: query },
+                      ],
+                      ...(targetSites ? { search_domain_filter: targetSites } : {}),
+                      search_recency_filter: searchRecencyFilter,
+                      return_citations: true,
+                    }),
                   })
 
                   if (!res.ok) {
@@ -314,23 +310,21 @@ export async function POST(req: Request) {
                   }
 
                   const data = await res.json() as {
-                    web?: {
-                      results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
-                    }
+                    choices?: { message?: { content?: string } }[]
+                    citations?: string[]
                   }
 
-                  const results = data.web?.results ?? []
-                  if (results.length === 0) {
+                  const answer = data.choices?.[0]?.message?.content?.trim()
+                  if (!answer) {
                     return `No results found for "${query}" across ${scopeLabel}.`
                   }
 
-                  return results
-                    .slice(0, 6)
-                    .map(
-                      (r) =>
-                        `[${r.profile?.name ?? r.title ?? 'Source'}] ${r.title ?? ''}: ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
-                    )
-                    .join('\n\n')
+                  const citations = data.citations ?? []
+                  const citationList = citations.length
+                    ? `\n\nSources:\n${citations.slice(0, 6).map((url, i) => `[${i + 1}] ${url}`).join('\n')}`
+                    : ''
+
+                  return `${answer}${citationList}`
                 } catch {
                   return `Search request errored for "${query}". No results were retrieved — say so plainly rather than guessing.`
                 }
@@ -352,7 +346,7 @@ You have access to:
 2. Live MLB standings, F1 driver/constructor championship standings, and the PGA Tour leaderboard (getStandings tool) — same data as the standings tables on the page.
 ${
   HAS_SEARCH_API
-    ? `3. Real-time web search (webSearch tool) spanning:
+    ? `3. Real-time web search via Perplexity (webSearch tool) — returns a synthesized, cited answer (not raw links) spanning:
    - Live sports platforms: ESPN, The Athletic, league sites (MLB/NFL/NBA/NHL/F1/PGA/ATP/WTA/Premier League/UEFA/MLS), broadcasters (Fox Sports, Sky Sports, TSN, Sportsnet, BBC, Yahoo, The Score), and reference/analytics sites (Pro/Baseball/Basketball Reference, FiveThirtyEight, RotoWire, Spotrac)
    - Major news outlets: AP, Reuters, NYT, Washington Post, The Guardian, Bloomberg, USA Today
    - Social platforms: X/Twitter and Reddit for real-time buzz, insider reports, and fan reaction`
