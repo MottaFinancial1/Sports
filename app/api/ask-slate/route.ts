@@ -1,7 +1,13 @@
-import { streamText, stepCountIs, tool, createUIMessageStreamResponse, convertToModelMessages } from 'ai'
+import { streamText, stepCountIs, tool, createUIMessageStreamResponse } from 'ai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
+
+// True only when a search/news API key is actually configured. When this is
+// false, the webSearch tool is not registered at all — the model is told
+// plainly that live news access isn't wired up, instead of pretending to
+// search and returning a canned "check ESPN" non-answer.
+const HAS_SEARCH_API = Boolean(process.env.BRAVE_SEARCH_API_KEY)
 
 // AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
 // Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
@@ -104,7 +110,10 @@ export async function POST(req: Request) {
       return Response.json({ error: 'Question required' }, { status: 400 })
     }
 
-    const { games } = await getTodaysGames()
+    // Pull the same live dataset that powers the ticker, game cards, and
+    // standings tables on the page — this is the app's real data source,
+    // not a re-fetch or a separate mock.
+    const { games, mlbStandings, f1Standings, pgaLeaderboard } = await getTodaysGames()
 
     const now = new Date()
     const scheduleContext = games
@@ -117,6 +126,38 @@ export async function POST(req: Request) {
         return `${g.leagueShort} ${g.date ? new Date(g.date).toLocaleDateString() : 'Today'}: ${g.shortName}, ${g.state === 'in' ? 'LIVE' : g.state === 'post' ? 'FINAL' : 'Pre'}${g.statusDetail ? ` (${g.statusDetail})` : ''}, Score: ${scoreline}${vibe ? `, Vibe: ${vibe.label}` : ''}, Venue: ${g.venue ?? 'TBD'}, Broadcasts: ${g.broadcasts.join(', ') || 'TBD'}`
       })
       .join('\n')
+
+    // Standings context — grounded in the exact same MLB/F1/PGA data the
+    // standings tables on the page render, so "who's leading the AL East"
+    // or "top of the PGA leaderboard" questions get real numbers instead of
+    // a punt to webSearch (which may not even be configured).
+    const mlbStandingsContext = mlbStandings.length
+      ? mlbStandings
+          .map((t) => `${t.division}: ${t.shortName} (${t.wins}-${t.losses}, ${t.pct}${t.gb && t.gb !== '-' ? `, GB ${t.gb}` : ''})`)
+          .join('\n')
+      : 'No MLB standings data available.'
+
+    const f1StandingsContext = f1Standings.drivers.length
+      ? [
+          'Drivers: ' +
+            f1Standings.drivers
+              .slice(0, 10)
+              .map((d) => `${d.position}. ${d.name} (${d.team}, ${d.points} pts)`)
+              .join(', '),
+          'Constructors: ' +
+            f1Standings.constructors
+              .slice(0, 10)
+              .map((c) => `${c.position}. ${c.name} (${c.points} pts)`)
+              .join(', '),
+        ].join('\n')
+      : 'No F1 standings data available.'
+
+    const pgaLeaderboardContext = pgaLeaderboard.length
+      ? pgaLeaderboard
+          .slice(0, 10)
+          .map((p) => `${p.position}. ${p.name} (${p.score}, today ${p.today}, thru ${p.thru})`)
+          .join('\n')
+      : 'No PGA leaderboard data available.'
 
     const tools = {
       searchSchedule: tool({
@@ -165,115 +206,138 @@ export async function POST(req: Request) {
         },
       }),
 
-      webSearch: tool({
+      getStandings: tool({
         description:
-          'Search live sports platforms, major news outlets, and social platforms (X/Twitter, Reddit) for real-time news, stats, injury reports, trades, rumors, standings, and analysis. Use for anything beyond today\'s schedule. Pick a scope: "all" (default, sports + news + social), "sports", "news", "social" (X/Reddit buzz & insider reports), or "open" (unrestricted whole-web search). Use "social" or "open" for breaking rumors and insider chatter.',
+          'Get real, live standings/leaderboard data already loaded by the app: MLB division standings, F1 driver & constructor championship standings, or the PGA Tour leaderboard. Use this for any "who\'s leading/in first/standings/rankings" question in those three — it is grounded data, not a guess.',
         inputSchema: z.object({
-          query: z.string().describe('Specific sports search query'),
-          scope: z
-            .enum(['all', 'sports', 'news', 'social', 'open'])
-            .optional()
-            .describe(
-              'Where to search: "all" = sports+news+social sites, "sports" = league/sports outlets, "news" = wire services & major papers, "social" = X/Twitter/Reddit for buzz & insider reports, "open" = unrestricted web. Defaults to "all".',
-            ),
-          sites: z
-            .array(z.string())
-            .optional()
-            .describe(
-              `Optionally restrict to specific domains (overrides scope). Available: ${ALL_SOURCES.join(', ')}`,
-            ),
-          recency: z
-            .enum(['day', 'week', 'month', 'any'])
-            .optional()
-            .describe('How recent results must be. Defaults to "week". Use "day" for breaking news, "any" for historical/stats.'),
+          league: z.enum(['mlb', 'f1', 'pga']).describe('Which standings/leaderboard to return'),
         }),
-        execute: async ({ query, scope, sites, recency }) => {
-          // Brave's query string has a hard limit (~2048 chars). site: filters
-          // blow past it quickly, so we keep the OR-list very short (≤6 domains)
-          // and for "all" / "open" scopes we simply run an unrestricted search
-          // (Brave already favors high-authority sports domains without filters).
-          let targetSites: string[] | null
-          if (sites?.length) {
-            // Caller-supplied list: honour it but cap at 5 to stay under the limit.
-            targetSites = sites.slice(0, 5)
-          } else {
-            switch (scope) {
-              case 'sports':
-                // Pick the 6 highest-signal sports domains only.
-                targetSites = ['espn.com', 'theathletic.com', 'cbssports.com', 'bleacherreport.com', 'sportingnews.com', 'si.com']
-                break
-              case 'news':
-                targetSites = ['apnews.com', 'reuters.com', 'nytimes.com', 'washingtonpost.com', 'theguardian.com', 'usatoday.com']
-                break
-              case 'social':
-                // X (twitter.com) and Reddit — short list, no length issue.
-                targetSites = ['x.com', 'twitter.com', 'reddit.com']
-                break
-              case 'open':
-              case 'all':
-              default:
-                // No site filter — Brave returns the best results across the web
-                // which naturally surfaces ESPN, The Athletic, wire services, X, etc.
-                targetSites = null
-                break
-            }
-          }
-
-          // Build a concise site filter (≤6 domains keeps the URL well under 500 chars).
-          const siteFilter = targetSites && targetSites.length > 0
-            ? ` (${targetSites.map((s) => `site:${s}`).join(' OR ')})`
-            : ''
-          const searchQuery = `${query}${siteFilter}`
-
-          const freshnessMap: Record<string, string> = { day: 'pd', week: 'pw', month: 'pm' }
-          const freshnessParam =
-            recency && recency !== 'any' && freshnessMap[recency]
-              ? `&freshness=${freshnessMap[recency]}`
-              : recency === 'any'
-                ? ''
-                : '&freshness=pw'
-
-          const scopeLabel = targetSites ? targetSites.join(', ') : 'the open web'
-
-          try {
-            const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
-            const res = await fetch(searchUrl, {
-              headers: {
-                'Accept': 'application/json',
-                'Accept-Encoding': 'gzip',
-                'X-Subscription-Token': process.env.BRAVE_SEARCH_API_KEY ?? '',
-              },
-              next: { revalidate: 60 },
-            })
-
-            if (!res.ok) {
-              // Graceful fallback: tell the model what sources to reference.
-              return `Web search unavailable. For "${query}", I'd recommend checking: ${scopeLabel} directly. Today's date: ${now.toLocaleDateString()}.`
-            }
-
-            const data = await res.json() as {
-              web?: {
-                results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
-              }
-            }
-
-            const results = data.web?.results ?? []
-            if (results.length === 0) {
-              return `No results found for "${query}" across ${scopeLabel}.`
-            }
-
-            return results
-              .slice(0, 6)
-              .map(
-                (r) =>
-                  `[${r.profile?.name ?? r.title ?? 'Source'}] ${r.title ?? ''}: ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
-              )
-              .join('\n\n')
-          } catch {
-            return `Search unavailable. Check ESPN, The Athletic, or X for the latest on "${query}".`
-          }
+        execute: async ({ league }) => {
+          if (league === 'mlb') return mlbStandingsContext
+          if (league === 'f1') return f1StandingsContext
+          return pgaLeaderboardContext
         },
       }),
+
+      // Only registered when BRAVE_SEARCH_API_KEY is actually configured.
+      // Without a key, this tool is omitted entirely rather than being called
+      // and silently returning a canned "check ESPN" string — the model is
+      // told in the system prompt that this capability doesn't exist yet.
+      ...(HAS_SEARCH_API
+        ? {
+            webSearch: tool({
+              description:
+                'Search live sports platforms, major news outlets, and social platforms (X/Twitter, Reddit) for real-time news, injury reports, trades, rumors, and analysis. Use for anything not covered by searchSchedule/findNextGame/getStandings. Pick a scope: "all" (default, sports + news + social), "sports", "news", "social" (X/Reddit buzz & insider reports), or "open" (unrestricted whole-web search). Use "social" or "open" for breaking rumors and insider chatter.',
+              inputSchema: z.object({
+                query: z.string().describe('Specific sports search query'),
+                scope: z
+                  .enum(['all', 'sports', 'news', 'social', 'open'])
+                  .optional()
+                  .describe(
+                    'Where to search: "all" = sports+news+social sites, "sports" = league/sports outlets, "news" = wire services & major papers, "social" = X/Twitter/Reddit for buzz & insider reports, "open" = unrestricted web. Defaults to "all".',
+                  ),
+                sites: z
+                  .array(z.string())
+                  .optional()
+                  .describe(
+                    `Optionally restrict to specific domains (overrides scope). Available: ${ALL_SOURCES.join(', ')}`,
+                  ),
+                recency: z
+                  .enum(['day', 'week', 'month', 'any'])
+                  .optional()
+                  .describe('How recent results must be. Defaults to "week". Use "day" for breaking news, "any" for historical/stats.'),
+              }),
+              execute: async ({ query, scope, sites, recency }) => {
+                // Brave's query string has a hard limit (~2048 chars). site: filters
+                // blow past it quickly, so we keep the OR-list very short (≤6 domains)
+                // and for "all" / "open" scopes we simply run an unrestricted search
+                // (Brave already favors high-authority sports domains without filters).
+                let targetSites: string[] | null
+                if (sites?.length) {
+                  // Caller-supplied list: honour it but cap at 5 to stay under the limit.
+                  targetSites = sites.slice(0, 5)
+                } else {
+                  switch (scope) {
+                    case 'sports':
+                      // Pick the 6 highest-signal sports domains only.
+                      targetSites = ['espn.com', 'theathletic.com', 'cbssports.com', 'bleacherreport.com', 'sportingnews.com', 'si.com']
+                      break
+                    case 'news':
+                      targetSites = ['apnews.com', 'reuters.com', 'nytimes.com', 'washingtonpost.com', 'theguardian.com', 'usatoday.com']
+                      break
+                    case 'social':
+                      // X (twitter.com) and Reddit — short list, no length issue.
+                      targetSites = ['x.com', 'twitter.com', 'reddit.com']
+                      break
+                    case 'open':
+                    case 'all':
+                    default:
+                      // No site filter — Brave returns the best results across the web
+                      // which naturally surfaces ESPN, The Athletic, wire services, X, etc.
+                      targetSites = null
+                      break
+                  }
+                }
+
+                // Build a concise site filter (≤6 domains keeps the URL well under 500 chars).
+                const siteFilter = targetSites && targetSites.length > 0
+                  ? ` (${targetSites.map((s) => `site:${s}`).join(' OR ')})`
+                  : ''
+                const searchQuery = `${query}${siteFilter}`
+
+                const freshnessMap: Record<string, string> = { day: 'pd', week: 'pw', month: 'pm' }
+                const freshnessParam =
+                  recency && recency !== 'any' && freshnessMap[recency]
+                    ? `&freshness=${freshnessMap[recency]}`
+                    : recency === 'any'
+                      ? ''
+                      : '&freshness=pw'
+
+                const scopeLabel = targetSites ? targetSites.join(', ') : 'the open web'
+
+                try {
+                  const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
+                  const res = await fetch(searchUrl, {
+                    headers: {
+                      'Accept': 'application/json',
+                      'Accept-Encoding': 'gzip',
+                      'X-Subscription-Token': process.env.BRAVE_SEARCH_API_KEY ?? '',
+                    },
+                    next: { revalidate: 60 },
+                  })
+
+                  if (!res.ok) {
+                    // The key is configured but the request itself failed
+                    // (rate limit, outage, bad key). Be honest about that
+                    // rather than implying a search happened.
+                    return `Search request failed (HTTP ${res.status}) for "${query}". No results were retrieved — say so plainly rather than guessing.`
+                  }
+
+                  const data = await res.json() as {
+                    web?: {
+                      results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
+                    }
+                  }
+
+                  const results = data.web?.results ?? []
+                  if (results.length === 0) {
+                    return `No results found for "${query}" across ${scopeLabel}.`
+                  }
+
+                  return results
+                    .slice(0, 6)
+                    .map(
+                      (r) =>
+                        `[${r.profile?.name ?? r.title ?? 'Source'}] ${r.title ?? ''}: ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
+                    )
+                    .join('\n\n')
+                } catch {
+                  return `Search request errored for "${query}". No results were retrieved — say so plainly rather than guessing.`
+                }
+              },
+            }),
+          }
+        : {}),
     }
 
     const result = streamText({
@@ -284,18 +348,29 @@ export async function POST(req: Request) {
       system: `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
 
 You have access to:
-1. Live game schedules across MLB, NFL, NCAAF, EPL, UCL, La Liga, MLS, F1, PGA, ATP, WTA, NBA, NCAAM (searchSchedule, findNextGame tools)
-2. Real-time web search (webSearch tool) spanning:
+1. Live game schedules across MLB, NFL, NCAAF, EPL, UCL, La Liga, MLS, F1, PGA, ATP, WTA, NBA, NCAAM (searchSchedule, findNextGame tools) — this is the exact same live data feeding the site's ticker and game cards.
+2. Live MLB standings, F1 driver/constructor championship standings, and the PGA Tour leaderboard (getStandings tool) — same data as the standings tables on the page.
+${
+  HAS_SEARCH_API
+    ? `3. Real-time web search (webSearch tool) spanning:
    - Live sports platforms: ESPN, The Athletic, league sites (MLB/NFL/NBA/NHL/F1/PGA/ATP/WTA/Premier League/UEFA/MLS), broadcasters (Fox Sports, Sky Sports, TSN, Sportsnet, BBC, Yahoo, The Score), and reference/analytics sites (Pro/Baseball/Basketball Reference, FiveThirtyEight, RotoWire, Spotrac)
    - Major news outlets: AP, Reuters, NYT, Washington Post, The Guardian, Bloomberg, USA Today
-   - Social platforms: X/Twitter and Reddit for real-time buzz, insider reports, and fan reaction
+   - Social platforms: X/Twitter and Reddit for real-time buzz, insider reports, and fan reaction`
+    : `3. No web/news search tool. It is not configured yet — do NOT claim to have searched, checked wires, or scanned social media, and do NOT tell the user to "check ESPN" as if that were your finding. When a question needs live trade/injury/rumor/breaking-news information you don't have (from tools 1-2 or your own training knowledge), say plainly and briefly that live news search isn't connected yet, then still answer with whatever you *do* know from schedule/standings data or general knowledge if relevant.`
+}
 
 Rules:
 - Be direct, fast, and specific. No fluff.
-- For schedule/score questions → use searchSchedule or findNextGame.
-- For stats, trades, injuries, news, standings, analysis, or social buzz → use webSearch. Choose the scope deliberately: "sports" for official stats/news, "news" for business/legal/breaking wire stories, "social" (X/Twitter, Reddit) for insider reports, rumors, and reactions, "all" to cast the widest net, and "open" only when the topic is niche and none of the curated sources fit.
+- For schedule/score/broadcast questions → use searchSchedule or findNextGame. These are live, not guesses.
+- For "who's leading/in first/standings" in MLB, F1, or PGA → use getStandings. This is live, not a guess.
+${
+  HAS_SEARCH_API
+    ? `- For trades, injuries, breaking news, or social buzz outside MLB/F1/PGA standings → use webSearch. Choose the scope deliberately: "sports" for official stats/news, "news" for business/legal/breaking wire stories, "social" (X/Twitter, Reddit) for insider reports, rumors, and reactions, "all" to cast the widest net, and "open" only when the topic is niche and none of the curated sources fit.
 - For breaking news and live rumors, set recency to "day" and prefer the "social" or "all" scope. For historical stats, set recency to "any".
-- Cite your source (site name, or handle/platform for X/Reddit) when using webSearch results.
+- Cite your source (site name, or handle/platform for X/Reddit) when using webSearch results.`
+    : `- For trades, injuries, breaking news, or standings outside MLB/F1/PGA — you have no live source for these right now. Be upfront about that instead of fabricating a search or a generic "go check ESPN" deflection.`
+}
+- Never claim to have accessed a source, run a search, or checked a site unless a tool call actually happened this turn.
 - Use **bold** for team names, player names, and key numbers. Use bullet points for lists of 3+ items.
 - Today's date: ${now.toLocaleDateString()}.
 
