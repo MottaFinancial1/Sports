@@ -12,59 +12,64 @@ export interface KeyDate {
   note?: string
 }
 
-// 2025–2026 sports calendar — drafts, trade deadlines, season openers, playoffs
+// 2026–2027 sports calendar — drafts, trade deadlines, season openers, playoffs
 const ALL_KEY_DATES: KeyDate[] = [
   // ---- MLB ----
-  { label: "MLB Trade Deadline", date: new Date("2025-07-31"), league: "MLB", leagueShort: "MLB", category: "deadline" },
-  { label: "MLB Wild Card Round", date: new Date("2025-09-30"), league: "MLB", leagueShort: "MLB", category: "playoffs", note: "Best-of-3" },
-  { label: "MLB Division Series", date: new Date("2025-10-07"), league: "MLB", leagueShort: "MLB", category: "playoffs", note: "ALDS/NLDS" },
-  { label: "MLB Championship Series", date: new Date("2025-10-15"), league: "MLB", leagueShort: "MLB", category: "playoffs", note: "ALCS/NLCS" },
-  { label: "World Series", date: new Date("2025-10-25"), league: "MLB", leagueShort: "MLB", category: "championship" },
-  { label: "MLB Opening Day", date: new Date("2026-03-26"), league: "MLB", leagueShort: "MLB", category: "opening" },
+  { label: "MLB Wild Card Round", date: new Date("2026-09-29"), league: "MLB", leagueShort: "MLB", category: "playoffs", note: "Best-of-3" },
+  { label: "MLB Division Series", date: new Date("2026-10-03"), league: "MLB", leagueShort: "MLB", category: "playoffs", note: "ALDS/NLDS" },
+  { label: "MLB Championship Series", date: new Date("2026-10-12"), league: "MLB", leagueShort: "MLB", category: "playoffs", note: "ALCS/NLCS" },
+  { label: "World Series", date: new Date("2026-10-23"), league: "MLB", leagueShort: "MLB", category: "championship" },
+  { label: "MLB Opening Day", date: new Date("2027-03-25"), league: "MLB", leagueShort: "MLB", category: "opening", note: "Date estimated" },
+  { label: "MLB Trade Deadline", date: new Date("2027-07-31"), league: "MLB", leagueShort: "MLB", category: "deadline", note: "Date estimated" },
 
   // ---- NFL ----
-  { label: "NFL Trade Deadline", date: new Date("2025-11-04"), league: "NFL", leagueShort: "NFL", category: "deadline" },
-  { label: "NFL Wild Card Weekend", date: new Date("2026-01-10"), league: "NFL", leagueShort: "NFL", category: "playoffs" },
-  { label: "NFL Divisional Round", date: new Date("2026-01-17"), league: "NFL", leagueShort: "NFL", category: "playoffs" },
-  { label: "NFL Conference Championships", date: new Date("2026-01-25"), league: "NFL", leagueShort: "NFL", category: "playoffs" },
-  { label: "Super Bowl LX", date: new Date("2026-02-08"), league: "NFL", leagueShort: "NFL", category: "championship", note: "New Orleans" },
-  { label: "NFL Draft", date: new Date("2026-04-23"), league: "NFL", leagueShort: "NFL", category: "draft", note: "Green Bay, WI" },
+  { label: "NFL Trade Deadline", date: new Date("2026-11-10"), league: "NFL", leagueShort: "NFL", category: "deadline" },
+  { label: "NFL Wild Card Weekend", date: new Date("2027-01-09"), league: "NFL", leagueShort: "NFL", category: "playoffs", note: "Date estimated" },
+  { label: "NFL Divisional Round", date: new Date("2027-01-17"), league: "NFL", leagueShort: "NFL", category: "playoffs", note: "Date estimated" },
+  { label: "NFL Conference Championships", date: new Date("2027-01-24"), league: "NFL", leagueShort: "NFL", category: "playoffs", note: "Date estimated" },
+  { label: "Super Bowl LXI", date: new Date("2027-02-14"), league: "NFL", leagueShort: "NFL", category: "championship", note: "SoFi Stadium, Inglewood, CA" },
+  { label: "NFL Draft", date: new Date("2027-04-29"), league: "NFL", leagueShort: "NFL", category: "draft", note: "Washington, D.C." },
 
   // ---- NBA ----
-  { label: "NBA Trade Deadline", date: new Date("2026-02-05"), league: "NBA", leagueShort: "NBA", category: "deadline" },
-  { label: "NBA Playoffs Begin", date: new Date("2026-04-18"), league: "NBA", leagueShort: "NBA", category: "playoffs" },
-  { label: "NBA Finals", date: new Date("2026-06-04"), league: "NBA", leagueShort: "NBA", category: "championship" },
-  { label: "NBA Draft", date: new Date("2026-06-25"), league: "NBA", leagueShort: "NBA", category: "draft", note: "Brooklyn, NY" },
+  { label: "NBA Season Opens", date: new Date("2026-10-20"), league: "NBA", leagueShort: "NBA", category: "opening" },
+  { label: "NBA Trade Deadline", date: new Date("2027-02-11"), league: "NBA", leagueShort: "NBA", category: "deadline" },
+  { label: "NBA All-Star Game", date: new Date("2027-02-21"), league: "NBA", leagueShort: "NBA", category: "event" },
+  { label: "NBA Play-In Tournament", date: new Date("2027-04-13"), league: "NBA", leagueShort: "NBA", category: "playoffs" },
+  { label: "NBA Playoffs Begin", date: new Date("2027-04-17"), league: "NBA", leagueShort: "NBA", category: "playoffs", note: "Date estimated" },
+  { label: "NBA Finals", date: new Date("2027-06-03"), league: "NBA", leagueShort: "NBA", category: "championship", note: "Date estimated" },
 
   // ---- NHL ----
-  { label: "NHL Trade Deadline", date: new Date("2026-03-02"), league: "NHL", leagueShort: "NHL", category: "deadline" },
-  { label: "NHL Playoffs Begin", date: new Date("2026-04-20"), league: "NHL", leagueShort: "NHL", category: "playoffs" },
-  { label: "Stanley Cup Finals", date: new Date("2026-06-01"), league: "NHL", leagueShort: "NHL", category: "championship" },
-  { label: "NHL Draft", date: new Date("2026-06-26"), league: "NHL", leagueShort: "NHL", category: "draft", note: "Las Vegas, NV" },
+  { label: "NHL Trade Deadline", date: new Date("2027-03-08"), league: "NHL", leagueShort: "NHL", category: "deadline", note: "Date estimated" },
+  { label: "NHL Playoffs Begin", date: new Date("2027-04-19"), league: "NHL", leagueShort: "NHL", category: "playoffs", note: "Date estimated" },
+  { label: "Stanley Cup Finals", date: new Date("2027-05-31"), league: "NHL", leagueShort: "NHL", category: "championship", note: "Date estimated" },
+  { label: "NHL Draft", date: new Date("2027-06-25"), league: "NHL", leagueShort: "NHL", category: "draft", note: "Date estimated" },
 
   // ---- F1 ----
-  { label: "F1 Belgian GP", date: new Date("2025-08-01"), league: "F1", leagueShort: "F1", category: "event", note: "Spa-Francorchamps" },
-  { label: "F1 Dutch GP", date: new Date("2025-08-31"), league: "F1", leagueShort: "F1", category: "event", note: "Zandvoort" },
-  { label: "F1 Italian GP", date: new Date("2025-09-07"), league: "F1", leagueShort: "F1", category: "event", note: "Monza" },
-  { label: "F1 Singapore GP", date: new Date("2025-10-05"), league: "F1", leagueShort: "F1", category: "event", note: "Marina Bay" },
-  { label: "F1 US Grand Prix", date: new Date("2025-10-19"), league: "F1", leagueShort: "F1", category: "event", note: "Austin, TX" },
-  { label: "F1 Abu Dhabi GP (Season Finale)", date: new Date("2025-12-07"), league: "F1", leagueShort: "F1", category: "event", note: "Yas Marina" },
+  { label: "F1 Azerbaijan GP", date: new Date("2026-09-25"), league: "F1", leagueShort: "F1", category: "event", note: "Baku" },
+  { label: "F1 Singapore GP", date: new Date("2026-10-10"), league: "F1", leagueShort: "F1", category: "event", note: "Marina Bay" },
+  { label: "F1 US Grand Prix", date: new Date("2026-10-24"), league: "F1", leagueShort: "F1", category: "event", note: "Austin, TX" },
+  { label: "F1 Mexico City GP", date: new Date("2026-10-31"), league: "F1", leagueShort: "F1", category: "event", note: "Mexico City" },
+  { label: "F1 São Paulo GP", date: new Date("2026-11-07"), league: "F1", leagueShort: "F1", category: "event", note: "Interlagos" },
+  { label: "F1 Las Vegas GP", date: new Date("2026-11-20"), league: "F1", leagueShort: "F1", category: "event", note: "Las Vegas, NV" },
+  { label: "F1 Qatar GP", date: new Date("2026-11-28"), league: "F1", leagueShort: "F1", category: "event", note: "Lusail" },
+  { label: "F1 Abu Dhabi GP (Season Finale)", date: new Date("2026-12-05"), league: "F1", leagueShort: "F1", category: "event", note: "Yas Marina" },
 
   // ---- Golf ----
-  { label: "PGA Championship", date: new Date("2026-05-21"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major" },
-  { label: "US Open", date: new Date("2026-06-18"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major" },
-  { label: "The Open Championship", date: new Date("2026-07-16"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major" },
+  { label: "The Masters", date: new Date("2027-04-08"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major • Date estimated" },
+  { label: "PGA Championship", date: new Date("2027-05-13"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major • Date estimated" },
+  { label: "US Open", date: new Date("2027-06-17"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major • Date estimated" },
+  { label: "The Open Championship", date: new Date("2027-07-15"), league: "PGA", leagueShort: "PGA", category: "event", note: "Major • Date estimated" },
 
   // ---- Tennis ----
-  { label: "US Open", date: new Date("2025-08-25"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • New York" },
-  { label: "Australian Open", date: new Date("2026-01-19"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • Melbourne" },
-  { label: "Roland Garros", date: new Date("2026-05-25"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • Paris" },
-  { label: "Wimbledon", date: new Date("2026-06-29"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • London" },
+  { label: "Australian Open", date: new Date("2027-01-18"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • Melbourne, date estimated" },
+  { label: "Roland Garros", date: new Date("2027-05-23"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • Paris, date estimated" },
+  { label: "Wimbledon", date: new Date("2027-06-28"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • London, date estimated" },
+  { label: "US Open", date: new Date("2027-08-30"), league: "Tennis", leagueShort: "Tennis", category: "event", note: "Grand Slam • New York, date estimated" },
 
   // ---- Soccer ----
-  { label: "MLS Playoffs Begin", date: new Date("2025-10-25"), league: "MLS", leagueShort: "MLS", category: "playoffs" },
-  { label: "MLS Cup", date: new Date("2025-12-06"), league: "MLS", leagueShort: "MLS", category: "championship" },
-  { label: "UEFA Champions League Final", date: new Date("2026-05-30"), league: "UCL", leagueShort: "UCL", category: "championship", note: "Wembley, London" },
+  { label: "MLS Playoffs Begin", date: new Date("2026-10-24"), league: "MLS", leagueShort: "MLS", category: "playoffs", note: "Date estimated" },
+  { label: "MLS Cup", date: new Date("2026-12-05"), league: "MLS", leagueShort: "MLS", category: "championship", note: "Date estimated" },
+  { label: "UEFA Champions League Final", date: new Date("2027-05-29"), league: "UCL", leagueShort: "UCL", category: "championship", note: "Date estimated" },
 ]
 
 const CATEGORY_COLOR: Record<KeyDate["category"], string> = {
