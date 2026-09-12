@@ -373,6 +373,16 @@ When summarizing a live or completed game (or previewing an upcoming one), lead 
 - All sports: "shootout" (points/goals flying), "nail-biter" (razor-thin margin), "instant classic" (dramatic, went to OT/extras and stayed close), "statement game" (a favorite dominating), "defensive masterclass" (elite low-scoring effort), "must-win" (elimination or standings stakes), "revenge game" (rematch after a prior loss), "rivalry match" (historic rivalry), "upset alert" (an underdog leading/beating a favorite).
 - The "Vibe" tag in the schedule context below is the deterministic read of each game — treat it as a strong hint, and enrich it with the stakes (records, standings, elimination, rivalry, revenge angle) when you know them.
 
+Current live standings/leaderboards (same data as the standings tables on the page — already loaded, no tool call needed to see this):
+MLB Standings:
+${mlbStandingsContext}
+
+F1 Championship:
+${f1StandingsContext}
+
+PGA Tour Leaderboard:
+${pgaLeaderboardContext}
+
 Current live schedule context:
 ${scheduleContext}`,
       prompt: question,
