@@ -53,6 +53,21 @@ export const LEAGUES: LeagueConfig[] = [
     path: "soccer/uefa.champions",
   },
   { id: "mls", label: "MLS", shortLabel: "MLS", category: "Soccer", path: "soccer/usa.1" },
+  { id: "uel", label: "Europa League", shortLabel: "UEL", category: "Soccer", path: "soccer/uefa.europa" },
+  { id: "uecl", label: "Conference League", shortLabel: "UECL", category: "Soccer", path: "soccer/uefa.europa.conf" },
+  // International soccer. These are only fetched in depth while they're
+  // actually being played (see fetchSoccerWeek), so listing a tournament here
+  // costs next to nothing the rest of the time and it appears on its own the
+  // moment fixtures show up.
+  { id: "unl", label: "UEFA Nations League", shortLabel: "Nations League", category: "Soccer", path: "soccer/uefa.nations" },
+  { id: "intl", label: "International Friendlies", shortLabel: "Friendlies", category: "Soccer", path: "soccer/fifa.friendly" },
+  { id: "cnl", label: "CONCACAF Nations League", shortLabel: "CONCACAF NL", category: "Soccer", path: "soccer/concacaf.nations.league" },
+  { id: "wc", label: "FIFA World Cup", shortLabel: "World Cup", category: "Soccer", path: "soccer/fifa.world" },
+  { id: "euro", label: "UEFA European Championship", shortLabel: "Euros", category: "Soccer", path: "soccer/uefa.euro" },
+  { id: "copa", label: "Copa América", shortLabel: "Copa América", category: "Soccer", path: "soccer/conmebol.america" },
+  { id: "gold", label: "CONCACAF Gold Cup", shortLabel: "Gold Cup", category: "Soccer", path: "soccer/concacaf.gold" },
+  { id: "afcon", label: "Africa Cup of Nations", shortLabel: "AFCON", category: "Soccer", path: "soccer/caf.nations" },
+  { id: "asian", label: "AFC Asian Cup", shortLabel: "Asian Cup", category: "Soccer", path: "soccer/afc.asian.cup" },
   { id: "f1", label: "Formula 1", shortLabel: "F1", category: "Motorsport", path: "racing/f1" },
   { id: "pga", label: "PGA Tour", shortLabel: "PGA", category: "Golf", path: "golf/pga" },
   { id: "atp", label: "ATP Tour", shortLabel: "ATP", category: "Tennis", path: "tennis/atp" },
@@ -123,6 +138,10 @@ export interface GameLeader {
 interface EspnResponse {
   events?: EspnEvent[]
   week?: { number?: number }
+  // The date ESPN resolved the (undated) scoreboard to: today's slate when
+  // there are games, otherwise the nearest match day.
+  day?: { date?: string }
+  leagues?: { calendarStartDate?: string; calendarEndDate?: string; calendar?: unknown }[]
 }
 
 interface EspnEvent {
@@ -260,12 +279,116 @@ function todayESPN(): string {
   return `${y}${m}${day}`
 }
 
+/** An ESPN `dates` / compact day string (YYYYMMDD) for a Date, in US Eastern. */
+const ET_DAY_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/New_York",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function etDay(date: Date): string {
+  const parts = ET_DAY_FORMAT.formatToParts(date)
+  const get = (t: string) => parts.find((p) => p.type === t)!.value
+  return `${get("year")}${get("month")}${get("day")}`
+}
+
+/** The US Eastern day an ISO timestamp falls on, or "" if it can't be parsed. */
+function etDayOfIso(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? "" : etDay(d)
+}
+
+/** YYYYMMDD strings for today and the next `count - 1` days (US Eastern). */
+function upcomingDays(count: number): string[] {
+  const today = todayESPN()
+  const base = Date.UTC(Number(today.slice(0, 4)), Number(today.slice(4, 6)) - 1, Number(today.slice(6, 8)))
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(base + i * 86_400_000)
+    return `${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, "0")}${String(d.getUTCDate()).padStart(2, "0")}`
+  })
+}
+
+function daysBetween(a: string, b: string): number {
+  const toMs = (s: string) => Date.UTC(Number(s.slice(0, 4)), Number(s.slice(4, 6)) - 1, Number(s.slice(6, 8)))
+  return Math.round((toMs(b) - toMs(a)) / 86_400_000)
+}
+
+interface LeagueFetchResult {
+  games: Game[]
+  /** The match day ESPN resolved an undated request to (YYYYMMDD). */
+  day?: string
+  /** Every match day on the league's calendar, when ESPN publishes one. */
+  calendarDays?: Set<string>
+}
+
+const compactDay = (s?: string) => (s ? s.slice(0, 10).replace(/-/g, "") : undefined)
+
+// Fixtures further out than today barely change, and tournaments that are
+// nowhere near being played don't need re-checking every minute.
+const scoreboardCache = new Map<string, { at: number; ttl: number; value: LeagueFetchResult }>()
+const FUTURE_DAY_TTL_MS = 10 * 60_000
+const DORMANT_LEAGUE_TTL_MS = 30 * 60_000
+
+async function fetchLeagueCached(league: LeagueConfig, date?: string): Promise<LeagueFetchResult> {
+  const key = `${league.id}:${date ?? "default"}`
+  const hit = scoreboardCache.get(key)
+  if (hit && Date.now() - hit.at < hit.ttl) return hit.value
+
+  const value = await fetchLeagueRaw(league, date)
+
+  let ttl = 0
+  if (date && date > todayESPN()) ttl = FUTURE_DAY_TTL_MS
+  else if (!date && value.day && Math.abs(daysBetween(todayESPN(), value.day)) > 14) ttl = DORMANT_LEAGUE_TTL_MS
+  if (ttl > 0) scoreboardCache.set(key, { at: Date.now(), ttl, value })
+  return value
+}
+
 async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
-  const dateParam = league.id === "mlb" ? `?dates=${todayESPN()}` : ""
+  return (await fetchLeagueRaw(league)).games
+}
+
+/**
+ * Soccer is scheduled on specific match days, and ESPN's undated scoreboard
+ * only returns a single day, which is often a past one. This returns what's
+ * actually relevant: live matches, today's slate, and everything in the next
+ * seven days. Leagues that aren't being played (off-season domestic leagues,
+ * tournaments months away) cost one cheap, cached request and return nothing.
+ */
+async function fetchSoccerWeek(league: LeagueConfig): Promise<Game[]> {
+  const window = upcomingDays(7)
+  const base = await fetchLeagueCached(league)
+
+  let days: string[] = []
+  if (base.calendarDays) {
+    // Domestic leagues publish their match days: only fetch the ones in range.
+    days = window.filter((d) => base.calendarDays!.has(d))
+  } else if (base.day && Math.abs(daysBetween(window[0], base.day)) <= 14) {
+    // Tournaments / international windows: play is happening around now.
+    days = window
+  }
+
+  const extra = await Promise.all(days.map((d) => fetchLeagueCached(league, d)))
+  const byId = new Map<string, Game>()
+  for (const g of [...base.games, ...extra.flatMap((r) => r.games)]) byId.set(g.id, g)
+
+  // Drop stale results (the undated scoreboard can resolve to a match day
+  // from last week) but keep live matches and yesterday's finals.
+  const oldest = etDay(new Date(Date.now() - 86_400_000))
+  const newest = window[window.length - 1]
+  return Array.from(byId.values()).filter((g) => {
+    if (g.state === "in") return true
+    const day = etDayOfIso(g.date)
+    return day !== "" && day >= oldest && day <= newest
+  })
+}
+
+async function fetchLeagueRaw(league: LeagueConfig, date?: string): Promise<LeagueFetchResult> {
+  const dateParam = date ? `?dates=${date}` : league.id === "mlb" ? `?dates=${todayESPN()}` : ""
   const url = `https://site.api.espn.com/apis/site/v2/sports/${league.path}/scoreboard${dateParam}`
   try {
     const res = await fetchWithTimeout(url)
-    if (!res.ok) return []
+    if (!res.ok) return { games: [] }
     const data = (await res.json()) as EspnResponse
     const isFootball = league.id === "nfl" || league.id === "ncaaf"
     const isTennis = league.category === "Tennis"
@@ -323,9 +446,14 @@ async function fetchLeague(league: LeagueConfig): Promise<Game[]> {
         })
       })
     }
-    return games
+    const calendar = data.leagues?.[0]?.calendar
+    const calendarDays =
+      Array.isArray(calendar) && calendar.length > 0 && calendar.every((c) => typeof c === "string")
+        ? new Set((calendar as string[]).map((c) => compactDay(c)!))
+        : undefined
+    return { games, day: compactDay(data.day?.date), calendarDays }
   } catch {
-    return []
+    return { games: [] }
   }
 }
 
@@ -968,11 +1096,14 @@ export interface SportsData {
   fetchedAt: string
 }
 
+const MAX_SOCCER_GAMES_PER_LEAGUE = 24
+
 export async function getTodaysGames(): Promise<SportsData> {
   const [results, news, statcast, f1Standings, pgaLeaderboard, mlbStandings] = await Promise.all([
     Promise.all(LEAGUES.map((league) => {
       if (league.id === "aaa") return fetchStormChasers()
       if (league.id === "mlb") return fetchMLBGames()
+      if (league.category === "Soccer") return fetchSoccerWeek(league)
       return fetchLeague(league)
     })),
     getTopNews(),
@@ -985,9 +1116,31 @@ export async function getTodaysGames(): Promise<SportsData> {
   // so the client can sort/filter without re-parsing dates in multiple places.
   const todayStr = todayESPN() // "YYYYMMDD"
   const todayYMD = `${todayStr.slice(0, 4)}-${todayStr.slice(4, 6)}-${todayStr.slice(6, 8)}`
-  const games = results.flat().map((g) => ({
+  const stamped = results.flat().map((g) => ({
     ...g,
-    isToday: g.state === "in" || g.state === "post" || g.date.startsWith(todayYMD),
+    // Soccer now spans a full week of fixtures, so a finished match only
+    // counts as "today" if it was actually played today.
+    isToday:
+      g.category === "Soccer"
+        ? g.state === "in" || etDayOfIso(g.date) === todayStr
+        : g.state === "in" || g.state === "post" || g.date.startsWith(todayYMD),
   }))
+
+  // A week of soccer can be a lot of cards (international windows especially).
+  // Keep each league's live and today's matches, then the soonest upcoming.
+  const soccerRank = (g: Game) => (g.state === "in" ? 0 : g.isToday ? 1 : 2)
+  const perLeague = new Map<string, number>()
+  const kept = new Set<Game>()
+  const byPriority = stamped
+    .filter((g) => g.category === "Soccer")
+    .sort((a, b) => soccerRank(a) - soccerRank(b) || new Date(a.date).getTime() - new Date(b.date).getTime())
+  for (const g of byPriority) {
+    const n = perLeague.get(g.leagueId) ?? 0
+    if (n < MAX_SOCCER_GAMES_PER_LEAGUE) {
+      perLeague.set(g.leagueId, n + 1)
+      kept.add(g)
+    }
+  }
+  const games = stamped.filter((g) => g.category !== "Soccer" || kept.has(g))
   return { games, news, statcast, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt: new Date().toISOString() }
 }

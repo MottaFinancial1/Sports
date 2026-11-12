@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { ArrowRight, Zap } from "lucide-react"
-import { isFavoriteGame, type Game, type LeagueCategory } from "@/lib/espn"
-import { isAlwaysSurfaceCategory, isCategoryInSeason } from "@/lib/season"
+import { isFavoriteGame, LEAGUES, type Game, type LeagueCategory } from "@/lib/espn"
+import { isCategoryInSeason } from "@/lib/season"
 
 export type CategoryStatus = "live" | "soon" | "scheduled" | "done"
 
@@ -35,14 +35,27 @@ export function orderCategories(
     })
 }
 
+// Matches kicking off within this long of the earliest one compete on league
+// prominence, so a Nations League night isn't headlined by an early friendly.
+const FEATURE_TIE_WINDOW_MS = 12 * 60 * 60 * 1000
+
+function leagueRank(game: Game): number {
+  const i = LEAGUES.findIndex((l) => l.id === game.leagueId)
+  return i === -1 ? LEAGUES.length : i
+}
+
 function pickFeaturedGame(games: Game[], now: number): Game | undefined {
   const live = games.filter((g) => g.state === "in")
   if (live.length > 0) {
-    return live.find(isFavoriteGame) ?? live[0]
+    return live.find(isFavoriteGame) ?? [...live].sort((a, b) => leagueRank(a) - leagueRank(b))[0]
   }
-  return games
+  const upcoming = games
     .filter((g) => g.state === "pre" && new Date(g.date).getTime() > now)
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  if (upcoming.length === 0) return undefined
+  const earliest = new Date(upcoming[0].date).getTime()
+  const contenders = upcoming.filter((g) => new Date(g.date).getTime() - earliest <= FEATURE_TIE_WINDOW_MS)
+  return contenders.find(isFavoriteGame) ?? contenders.sort((a, b) => leagueRank(a) - leagueRank(b))[0]
 }
 
 function Countdown({ iso }: { iso: string }) {
@@ -215,20 +228,17 @@ export function SportSpotlight({
       now,
     )
 
-    // Baseball and the major European soccer leagues always get a spotlight
-    // slot while in season, even if another sport happens to be live right
-    // now — they're the priority sports for this app, not just whatever's
-    // live at the moment.
-    const pinned = ordered.filter(
-      (c) => isAlwaysSurfaceCategory(c.category) && isCategoryInSeason(c.category, new Date(now)) && c.status !== "done",
-    )
-    const rest = ordered.filter(
-      (c) => !pinned.some((p) => p.category === c.category) && (c.status === "live" || c.status === "soon"),
+    // `priority` is already ordered by what's being played (live, today, this
+    // week), so the spotlight just follows the schedule. Sports that are
+    // off-season on paper only show up once they're live or about to start.
+    const visible = ordered.filter(
+      (c) =>
+        c.status === "live" ||
+        c.status === "soon" ||
+        (c.status === "scheduled" && isCategoryInSeason(c.category, new Date(now))),
     )
 
-    return [...pinned, ...rest]
-      .slice(0, 4)
-      .map((c) => ({ ...c, games: byCategory.get(c.category)! }))
+    return visible.slice(0, 4).map((c) => ({ ...c, games: byCategory.get(c.category)! }))
   }, [games, priority, now])
 
   if (spotlights.length === 0) return null

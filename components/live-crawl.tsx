@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import type { Game } from "@/lib/espn"
+import { getSeasonalCategoryOrder } from "@/lib/season"
 
 interface CrawlItem {
   id: string
@@ -12,14 +13,6 @@ interface CrawlItem {
   state: "in" | "pre" | "post"
 }
 
-const SPORT_ORDER = ["Baseball", "Football", "Basketball", "Soccer", "Motorsport", "Golf", "Tennis"]
-
-// Soccer leagues restricted to "this week's fixtures only" — the top 5
-// European domestic leagues plus the Champions League, and MLS. MLS is
-// included here (not exempted) so it never gets more ticker visibility
-// than the major European leagues.
-const WEEKLY_SOCCER_IDS = new Set(["epl", "laliga", "bundesliga", "seriea", "ligue1", "ucl", "mls"])
-
 // Tennis rounds that signal top players are still in the draw
 const TENNIS_LATE_ROUNDS = new Set([
   "quarterfinals", "quarter-finals", "quarter finals",
@@ -27,28 +20,11 @@ const TENNIS_LATE_ROUNDS = new Set([
   "final", "finals",
 ])
 
-/** Returns true if `date` falls within the current Mon–Sun week (local time). */
-function isThisCalendarWeek(date: Date): boolean {
-  const now = new Date()
-  // Monday of this week (0 = Sun, so shift)
-  const day = now.getDay() === 0 ? 6 : now.getDay() - 1
-  const monday = new Date(now)
-  monday.setHours(0, 0, 0, 0)
-  monday.setDate(now.getDate() - day)
-  const sunday = new Date(monday)
-  sunday.setDate(monday.getDate() + 6)
-  sunday.setHours(23, 59, 59, 999)
-  return date >= monday && date <= sunday
-}
-
 /** Per-game filter rules for the ticker. Returns false to exclude. */
 function passesTickerRules(g: Game): boolean {
-  const gameDate = new Date(g.date)
-
-  // Soccer: only show if the match is in the current calendar week
-  if (WEEKLY_SOCCER_IDS.has(g.leagueId)) {
-    return isThisCalendarWeek(gameDate)
-  }
+  // Soccer is already limited to a rolling week of fixtures upstream, which
+  // keeps international windows (Nations League, qualifiers, friendlies) in play.
+  if (g.category === "Soccer") return true
 
   // Golf (PGA): live events only — no upcoming, and cap to 3 entries handled later
   if (g.leagueId === "pga") {
@@ -69,12 +45,14 @@ function buildItems(games: Game[]): CrawlItem[] {
   const sevenDays = now + 7 * 24 * 60 * 60 * 1000
 
   const filtered = games.filter(passesTickerRules)
+  const categoryOrder = getSeasonalCategoryOrder(games)
+  const sportRank = (g: Game) => categoryOrder.indexOf(g.category)
 
   // Live games — sorted by sport priority, golf capped at 3
   const liveByLeague = new Map<string, number>()
   const live = filtered
     .filter((g) => g.state === "in")
-    .sort((a, b) => SPORT_ORDER.indexOf(a.category) - SPORT_ORDER.indexOf(b.category))
+    .sort((a, b) => sportRank(a) - sportRank(b))
     .filter((g) => {
       if (g.leagueId === "pga") {
         const count = liveByLeague.get("pga") ?? 0
@@ -111,6 +89,7 @@ function buildItems(games: Game[]): CrawlItem[] {
       const bIsToday = b.isToday ?? false
       if (aIsToday && !bIsToday) return -1
       if (!aIsToday && bIsToday) return 1
+      if (aIsToday && bIsToday && sportRank(a) !== sportRank(b)) return sportRank(a) - sportRank(b)
       return new Date(a.date).getTime() - new Date(b.date).getTime()
     })
     .slice(0, 14)

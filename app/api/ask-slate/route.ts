@@ -2,6 +2,7 @@ import { streamText, stepCountIs, tool, createUIMessageStreamResponse, convertTo
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
+import { describeSeasonalContext, getSeasonalCategoryOrder } from '@/lib/season'
 
 // AI SDK routes `provider/model` strings through Vercel AI Gateway automatically.
 // Deployed Vercel projects authenticate with OIDC, so no AI Gateway API key is
@@ -107,7 +108,20 @@ export async function POST(req: Request) {
     const { games } = await getTodaysGames()
 
     const now = new Date()
-    const scheduleContext = games
+    // Rank what's on the board by what's actually being played: sports that are
+    // live or playing today/this week come first, and within a sport live games
+    // lead, then today's, then the soonest upcoming. The 50-game cap then trims
+    // the least relevant games instead of whichever league was fetched last.
+    const categoryOrder = getSeasonalCategoryOrder(games, now)
+    const gameRank = (g: (typeof games)[number]) => (g.state === 'in' ? 0 : g.isToday ? 1 : g.state === 'pre' ? 2 : 3)
+    const seasonalContext = describeSeasonalContext(games, now)
+    const scheduleContext = [...games]
+      .sort(
+        (a, b) =>
+          categoryOrder.indexOf(a.category) - categoryOrder.indexOf(b.category) ||
+          gameRank(a) - gameRank(b) ||
+          new Date(a.date).getTime() - new Date(b.date).getTime(),
+      )
       .slice(0, 50)
       .map((g) => {
         const vibe = getGameVibe(g)
@@ -284,7 +298,7 @@ export async function POST(req: Request) {
       system: `You are the sports intelligence engine powering "Ball Knowledge" — a sharp, data-forward platform for serious sports fans.
 
 You have access to:
-1. Live game schedules across MLB, NFL, NCAAF, EPL, UCL, La Liga, MLS, F1, PGA, ATP, WTA, NBA, NCAAM (searchSchedule, findNextGame tools)
+1. Live game schedules across MLB, NFL, NCAAF, club soccer (EPL, La Liga, Bundesliga, Serie A, Ligue 1, UCL/UEL, MLS), international soccer (Nations League, qualifiers, friendlies, World Cup and continental tournaments), F1, PGA, ATP, WTA, NBA, NCAAM (searchSchedule, findNextGame tools)
 2. Real-time web search (webSearch tool) spanning:
    - Live sports platforms: ESPN, The Athletic, league sites (MLB/NFL/NBA/NHL/F1/PGA/ATP/WTA/Premier League/UEFA/MLS), broadcasters (Fox Sports, Sky Sports, TSN, Sportsnet, BBC, Yahoo, The Score), and reference/analytics sites (Pro/Baseball/Basketball Reference, FiveThirtyEight, RotoWire, Spotrac)
    - Major news outlets: AP, Reuters, NYT, Washington Post, The Guardian, Bloomberg, USA Today
@@ -298,11 +312,15 @@ Rules:
 - Cite your source (site name, or handle/platform for X/Reddit) when using webSearch results.
 - Use **bold** for team names, player names, and key numbers. Use bullet points for lists of 3+ items.
 - Today's date: ${now.toLocaleDateString()}.
+- Always adapt to what is actually in season. Lead with the sports that are live or playing today or this week (see the season snapshot below). Never volunteer off-season sports, and if the user asks about one, answer briefly and point to what is being played now.
 
 When summarizing a live or completed game (or previewing an upcoming one), lead with the ONE descriptor that best captures its character, then back it with the decisive number(s). Draw from this vocabulary and apply it honestly — only use a label the data supports:
 - Baseball: "pitcher's duel" (both lineups shut down), "slugfest" (runs pouring in), "bullpen game" (no traditional starter going deep), "enticing pitching matchup" / "ace duel" (two aces on the mound for a preview), "EXTRA INNINGS" (tied after 9), "bats alive", "nail-biter".
 - All sports: "shootout" (points/goals flying), "nail-biter" (razor-thin margin), "instant classic" (dramatic, went to OT/extras and stayed close), "statement game" (a favorite dominating), "defensive masterclass" (elite low-scoring effort), "must-win" (elimination or standings stakes), "revenge game" (rematch after a prior loss), "rivalry match" (historic rivalry), "upset alert" (an underdog leading/beating a favorite).
 - The "Vibe" tag in the schedule context below is the deterministic read of each game — treat it as a strong hint, and enrich it with the stakes (records, standings, elimination, rivalry, revenge angle) when you know them.
+
+Season snapshot (most active first):
+${seasonalContext}
 
 Current live schedule context:
 ${scheduleContext}`,
