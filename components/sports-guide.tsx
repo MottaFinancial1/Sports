@@ -25,7 +25,7 @@ import {
   type StatcastHighlight,
 } from "@/lib/espn"
 import { getTeamViews, gameViewScore, type TeamViewMap } from "@/lib/team-views"
-import { getSeasonalCategoryOrder } from "@/lib/season"
+import { getSeasonalCategoryOrder, rankLeaguesByActivity } from "@/lib/season"
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json() as Promise<SportsData>)
 
@@ -71,10 +71,9 @@ export function SportsGuide({
   const [updated, setUpdated] = useState<string>("")
   const [teamViews, setTeamViews] = useState<TeamViewMap>({})
 
-  // Sport priority is season-aware: baseball and the major European soccer
-  // leagues are pinned to the front whenever they're in season, ahead of
-  // whatever else happens to be in season or live.
-  const CATEGORY_ORDER = useMemo<LeagueCategory[]>(() => getSeasonalCategoryOrder(), [])
+  // Sport priority follows the schedule: live first, then sports playing today,
+  // then sports with games later this week, then whatever is merely in season.
+  const CATEGORY_ORDER = useMemo<LeagueCategory[]>(() => getSeasonalCategoryOrder(games), [games])
 
   useEffect(() => {
     setTeamViews(getTeamViews())
@@ -95,14 +94,28 @@ export function SportsGuide({
   const liveCount = useMemo(() => games.filter((g) => g.state === "in").length, [games])
   const todayCount = useMemo(() => games.filter((g) => g.isToday).length, [games])
   const liveGames = useMemo(
-    () => games.filter((g) => g.state === "in").sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
-    [games],
+    () =>
+      games
+        .filter((g) => g.state === "in")
+        .sort(
+          (a, b) =>
+            CATEGORY_ORDER.indexOf(a.category) - CATEGORY_ORDER.indexOf(b.category) ||
+            new Date(a.date).getTime() - new Date(b.date).getTime(),
+        ),
+    [games, CATEGORY_ORDER],
   )
 
   const activeLeagues = useMemo(() => {
     const ids = new Set(games.map((g) => g.leagueId))
-    return LEAGUES.filter((l) => ids.has(l.id))
-  }, [games])
+    const inGuide = LEAGUES.filter((l) => ids.has(l.id))
+    const byCategory = CATEGORY_ORDER.flatMap((category) =>
+      rankLeaguesByActivity(
+        inGuide.filter((l) => l.category === category),
+        games,
+      ),
+    )
+    return byCategory
+  }, [games, CATEGORY_ORDER])
 
   const favoriteGames = useMemo(
     () =>
@@ -169,7 +182,10 @@ export function SportsGuide({
 
     return ordered
       .map(({ category, status }) => {
-        const leaguesInCat = LEAGUES.filter((l) => l.category === category && byLeague.has(l.id))
+        const leaguesInCat = rankLeaguesByActivity(
+          LEAGUES.filter((l) => l.category === category && byLeague.has(l.id)),
+          filtered,
+        )
         return {
           category,
           status,
@@ -177,7 +193,7 @@ export function SportsGuide({
         }
       })
       .filter((c) => c.leagues.length > 0)
-  }, [filtered, teamViews])
+  }, [filtered, teamViews, CATEGORY_ORDER])
 
   return (
     <div className="relative z-[1] mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
@@ -262,7 +278,7 @@ export function SportsGuide({
 
         {/* LEFT — sticky Ask Ball Knowledge */}
         <div className="w-full lg:sticky lg:top-[100px] lg:w-[380px] lg:shrink-0 xl:w-[420px]">
-          <AskSlate />
+          <AskSlate games={games} />
         </div>
 
         {/* RIGHT — scrollable content feed */}

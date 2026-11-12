@@ -1,21 +1,15 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useChat } from '@ai-sdk/react'
 import { DefaultChatTransport, isTextUIPart } from 'ai'
 import ReactMarkdown from 'react-markdown'
 import { Bot, CircleCheck, Send, Sparkles, X } from 'lucide-react'
+import type { Game } from '@/lib/espn'
+import { getSeasonalSuggestions } from '@/lib/season'
 
-const SUGGESTED = [
-  'Any big trades today?',
-  'F1 standings after last race?',
-  'Red Sox injury report?',
-  'Bills next game + broadcast?',
-  'PGA leaderboard right now?',
-  'NBA offseason moves this week?',
-]
-
-export function AskSlate() {
+export function AskSlate({ games = [] }: { games?: Game[] }) {
+  const suggestions = useMemo(() => getSeasonalSuggestions(games), [games])
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [input, setInput] = useState('')
@@ -117,7 +111,7 @@ export function AskSlate() {
               </div>
               {/* Suggested questions */}
               <div className="flex flex-wrap gap-2">
-                {SUGGESTED.map((q) => (
+                {suggestions.map((q) => (
                   <button
                     key={q}
                     type="button"
