@@ -22,6 +22,7 @@ import {
   type NewsArticle,
   type PGAPlayer,
   type SportsData,
+  type StandingsBoard,
   type StatcastHighlight,
 } from "@/lib/espn"
 import { getTeamViews, gameViewScore, type TeamViewMap } from "@/lib/team-views"
@@ -37,7 +38,7 @@ export function SportsGuide({
   statcast: initialStatcast,
   f1Standings: initialF1Standings,
   pgaLeaderboard: initialPGALeaderboard,
-  mlbStandings: initialMlbStandings,
+  standingsBoards: initialStandingsBoards,
   fetchedAt: initialFetchedAt,
 }: {
   games: Game[]
@@ -45,11 +46,11 @@ export function SportsGuide({
   statcast: StatcastHighlight[]
   f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
   pgaLeaderboard: PGAPlayer[]
-  mlbStandings: import("@/lib/espn").MLBStandingTeam[]
+  standingsBoards: StandingsBoard[]
   fetchedAt: string
 }) {
   const { data } = useSWR<SportsData>("/api/games", fetcher, {
-    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, f1Standings: initialF1Standings, pgaLeaderboard: initialPGALeaderboard, mlbStandings: initialMlbStandings, fetchedAt: initialFetchedAt },
+    fallbackData: { games: initialGames, news: initialNews, statcast: initialStatcast, f1Standings: initialF1Standings, pgaLeaderboard: initialPGALeaderboard, standingsBoards: initialStandingsBoards, fetchedAt: initialFetchedAt },
     refreshInterval: 60_000,
     refreshWhenHidden: true,
     revalidateOnFocus: true,
@@ -63,7 +64,7 @@ export function SportsGuide({
   const statcast = data?.statcast ?? initialStatcast
   const f1Standings = data?.f1Standings ?? initialF1Standings
   const pgaLeaderboard = data?.pgaLeaderboard ?? initialPGALeaderboard
-  const mlbStandings = data?.mlbStandings ?? initialMlbStandings
+  const standingsBoards = data?.standingsBoards ?? initialStandingsBoards
   const fetchedAt = data?.fetchedAt ?? initialFetchedAt
 
   const [filter, setFilter] = useState<Filter>("all")
@@ -350,7 +351,7 @@ export function SportsGuide({
           ) : null}
 
           {filter === "all" ? <PGALeaderboard players={pgaLeaderboard} /> : null}
-          {filter === "all" ? <StandingsLeaderboard standings={mlbStandings} /> : null}
+          {filter === "all" ? <StandingsLeaderboard boards={standingsBoards} /> : null}
           {filter === "all" ? <KeyDates /> : null}
 
           {grouped.length === 0 ? (

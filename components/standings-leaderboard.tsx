@@ -1,7 +1,7 @@
 "use client"
 
 import { Trophy, Star } from "lucide-react"
-import type { F1Constructor, F1Driver, PGAPlayer } from "@/lib/espn"
+import type { F1Constructor, F1Driver, PGAPlayer, StandingsBoard, StandingsRow } from "@/lib/espn"
 
 // ---- Shared primitives ----
 
@@ -202,72 +202,123 @@ export function PGALeaderboard({ players }: { players: PGAPlayer[] }) {
   )
 }
 
-// ---- MLB Standings ----
+// ---- Top standings: leagues currently in season ----
 
-import type { MLBStandingTeam } from "@/lib/espn"
+function TrendCell({ trend }: { trend?: string }) {
+  const up = trend?.startsWith("+")
+  const down = trend ? /^-\d/.test(trend) : false
+  return (
+    <td
+      className={`px-4 py-2.5 text-right font-mono text-xs tabular-nums ${
+        up ? "text-primary" : down ? "text-destructive" : "text-muted-foreground"
+      }`}
+    >
+      {trend && trend !== "-" ? trend : "—"}
+    </td>
+  )
+}
 
-export function StandingsLeaderboard({ standings }: { standings: MLBStandingTeam[] }) {
-  const byDivision = new Map<string, (MLBStandingTeam & { position: number })[]>()
-  for (const team of standings) {
-    if (!byDivision.has(team.division)) byDivision.set(team.division, [])
-    byDivision.get(team.division)!.push({ ...team, position: 0 })
-  }
-  byDivision.forEach((teams) => {
-    teams.sort((a, b) => (b.wins !== a.wins ? b.wins - a.wins : a.losses - b.losses))
-    teams.forEach((t, i) => { t.position = i + 1 })
-  })
+function TeamCell({ row }: { row: StandingsRow }) {
+  return (
+    <td className="px-4 py-2.5">
+      <div className="flex items-center gap-2">
+        {row.logo ? (
+          <img src={row.logo || "/placeholder.svg"} alt="" className="h-5 w-5 shrink-0 object-contain" />
+        ) : (
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[8px] font-bold text-muted-foreground">
+            {row.name.slice(0, 1)}
+          </span>
+        )}
+        <span className="font-semibold text-foreground">{row.name}</span>
+      </div>
+    </td>
+  )
+}
 
-  const divisionOrder = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"]
-  const sortedDivisions = divisionOrder.filter((d) => byDivision.has(d))
+function PollTable({ rows }: { rows: StandingsRow[] }) {
+  return (
+    <TableWrap>
+      <thead>
+        <tr className="border-b border-border">
+          <Th>#</Th>
+          <Th>Team</Th>
+          <Th right>Record</Th>
+          <Th right>Move</Th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {rows.map((row) => (
+          <tr key={`${row.rank}-${row.name}`} className="transition-colors hover:bg-secondary/40">
+            <RankCell position={row.rank} />
+            <TeamCell row={row} />
+            <Td right mono bold accent>{row.record}</Td>
+            <TrendCell trend={row.trend} />
+          </tr>
+        ))}
+      </tbody>
+    </TableWrap>
+  )
+}
 
-  if (standings.length === 0) return null
+function ConferenceTable({ rows }: { rows: StandingsRow[] }) {
+  return (
+    <TableWrap>
+      <thead>
+        <tr className="border-b border-border">
+          <Th>#</Th>
+          <Th>Team</Th>
+          <Th right>Record</Th>
+          <Th right>GB</Th>
+          <Th right>Strk</Th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border">
+        {rows.map((row) => (
+          <tr key={`${row.rank}-${row.name}`} className="transition-colors hover:bg-secondary/40">
+            <RankCell position={row.rank} />
+            <TeamCell row={row} />
+            <Td right mono bold accent>{row.record}</Td>
+            <Td right mono>{!row.gb || row.gb === "-" || row.gb === "0" ? "—" : row.gb}</Td>
+            <td
+              className={`px-4 py-2.5 text-right font-mono text-xs tabular-nums ${
+                row.streak?.startsWith("W") ? "text-primary" : "text-muted-foreground"
+              }`}
+            >
+              {row.streak || "—"}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </TableWrap>
+  )
+}
+
+export function StandingsLeaderboard({ boards }: { boards: StandingsBoard[] }) {
+  if (boards.length === 0) return null
 
   return (
-    <section className="mb-10 space-y-6">
-      <SectionLabel icon={Trophy} title="MLB Standings" />
-      {sortedDivisions.map((division) => (
-        <div key={division}>
-          <h3 className="mb-2 px-1 font-mono text-xs font-bold uppercase tracking-wider text-primary">
-            {division}
-          </h3>
-          <TableWrap>
-            <thead>
-              <tr className="border-b border-border">
-                <Th>#</Th>
-                <Th>Team</Th>
-                <Th right>W</Th>
-                <Th right>L</Th>
-                <Th right>PCT</Th>
-                <Th right>GB</Th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {byDivision.get(division)?.map((entry) => (
-                <tr key={entry.abbreviation} className="transition-colors hover:bg-secondary/40">
-                  <RankCell position={entry.position} />
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      {entry.logo ? (
-                        <img src={entry.logo} alt="" className="h-5 w-5 shrink-0 object-contain" />
-                      ) : (
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[8px] font-bold text-muted-foreground">
-                          {entry.abbreviation.slice(0, 1)}
-                        </span>
-                      )}
-                      <span className="font-semibold text-foreground">{entry.shortName}</span>
-                      <span className="hidden text-xs text-muted-foreground sm:inline">{entry.abbreviation}</span>
-                    </div>
-                  </td>
-                  <Td right mono bold accent>{entry.wins}</Td>
-                  <Td right mono>{entry.losses}</Td>
-                  <Td right mono>{entry.pct}</Td>
-                  <td className="px-4 py-2.5 text-right font-mono text-xs tabular-nums text-muted-foreground">
-                    {entry.gb === "0.0" || entry.gb === "-" ? "—" : entry.gb}
-                  </td>
-                </tr>
+    <section className="mb-10 space-y-8">
+      <SectionLabel icon={Trophy} title="Top Standings" />
+      {boards.map((board) => (
+        <div key={board.id}>
+          <div className="mb-2 flex items-baseline gap-2 px-1">
+            <h3 className="font-mono text-xs font-bold uppercase tracking-wider text-primary">{board.title}</h3>
+            <span className="text-xs text-muted-foreground">{board.subtitle}</span>
+          </div>
+          {board.kind === "poll" ? (
+            <PollTable rows={board.groups[0].rows} />
+          ) : (
+            <div className="flex flex-col gap-4">
+              {board.groups.map((group) => (
+                <div key={group.label}>
+                  {group.label ? (
+                    <p className="mb-1.5 px-1 text-[11px] font-semibold text-muted-foreground">{group.label}</p>
+                  ) : null}
+                  <ConferenceTable rows={group.rows} />
+                </div>
               ))}
-            </tbody>
-          </TableWrap>
+            </div>
+          )}
         </div>
       ))}
     </section>

@@ -7,11 +7,11 @@ import { getTodaysGames } from "@/lib/espn"
 export const dynamic = "force-dynamic"
 
 export default async function Page() {
-  const { games, news, statcast, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt } = await getTodaysGames()
+  const { games, news, statcast, f1Standings, pgaLeaderboard, standingsBoards, fetchedAt } = await getTodaysGames()
 
   return (
     <main className="min-h-screen bg-background">
-      <SportsGuide games={games} news={news} statcast={statcast} f1Standings={f1Standings} pgaLeaderboard={pgaLeaderboard} mlbStandings={mlbStandings} fetchedAt={fetchedAt} />
+      <SportsGuide games={games} news={news} statcast={statcast} f1Standings={f1Standings} pgaLeaderboard={pgaLeaderboard} standingsBoards={standingsBoards} fetchedAt={fetchedAt} />
     </main>
   )
 }

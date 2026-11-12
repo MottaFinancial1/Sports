@@ -3,6 +3,8 @@
 // default, so this naturally rolls over to a new day. We revalidate on a
 // short interval so times/scores stay fresh and the date updates on its own.
 
+import { isCategoryInSeason } from "./season"
+
 // Personalized sport ranking: Baseball, Football, Soccer, Motorsport (F1),
 // Golf, Tennis, Basketball. NHL and UFC are intentionally excluded.
 export type LeagueCategory =
@@ -1016,74 +1018,194 @@ export async function getPGALeaderboard(): Promise<PGAPlayer[]> {
   }
 }
 
-// ---------- MLB Standings (live via MLB Stats API) ----------
+// ---------- Top standings for the biggest leagues in season ----------
 
-export interface MLBStandingTeam {
-  teamId: number
+export interface StandingsRow {
+  rank: number
   name: string
-  shortName: string
   abbreviation: string
-  division: string
-  wins: number
-  losses: number
-  pct: string
-  gb: string
   logo: string
+  record: string
+  pct?: string
+  gb?: string
+  streak?: string
+  trend?: string
 }
 
-export async function getMLBStandings(): Promise<MLBStandingTeam[]> {
+export interface StandingsGroup {
+  label?: string
+  rows: StandingsRow[]
+}
+
+export interface StandingsBoard {
+  id: "cfb" | "ncaam" | "nfl" | "nba"
+  title: string
+  subtitle: string
+  kind: "poll" | "standings"
+  category: LeagueCategory
+  groups: StandingsGroup[]
+}
+
+interface EspnLogo { href?: string; rel?: string[] }
+interface EspnBoardTeam {
+  location?: string
+  displayName?: string
+  shortDisplayName?: string
+  abbreviation?: string
+  logos?: EspnLogo[]
+}
+
+function pickLogo(logos?: EspnLogo[]): string {
+  if (!logos?.length) return ""
+  return (logos.find((l) => l.rel?.includes("default")) ?? logos[0]).href ?? ""
+}
+
+const BOARD_FETCH_INIT = {
+  next: { revalidate: 300 },
+  headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
+} as const
+
+async function fetchPollBoard(
+  id: "cfb" | "ncaam",
+  title: string,
+  url: string,
+  category: LeagueCategory,
+): Promise<StandingsBoard | null> {
   try {
-    const res = await fetch(
-      "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=2026&standingsTypes=regularSeason&hydrate=team",
-      {
-        next: { revalidate: 300 },
-        headers: { "User-Agent": "Mozilla/5.0 (sports-today)" },
-      },
-    )
-    if (!res.ok) return []
+    const res = await fetch(url, BOARD_FETCH_INIT)
+    if (!res.ok) return null
     const data = (await res.json()) as {
-      records?: {
-        division?: { id?: number; nameShort?: string }
-        teamRecords?: {
-          team?: { id?: number; name?: string; teamName?: string; abbreviation?: string; clubName?: string }
-          wins?: number
-          losses?: number
-          winningPercentage?: string
-          gamesBack?: string
-          divisionRank?: string
+      rankings?: {
+        type?: string
+        headline?: string
+        ranks?: {
+          current?: number
+          trend?: string
+          recordSummary?: string
+          team?: EspnBoardTeam
         }[]
       }[]
     }
-
-    const divisionNames: Record<number, string> = {
-      200: "AL West", 201: "AL East", 202: "AL Central",
-      203: "NL West", 204: "NL East", 205: "NL Central",
+    const ap = data.rankings?.find((r) => r.type === "ap") ?? data.rankings?.[0]
+    if (!ap?.ranks?.length) return null
+    const rows: StandingsRow[] = ap.ranks.slice(0, 10).map((r, i) => ({
+      rank: r.current ?? i + 1,
+      name: r.team?.location ?? r.team?.displayName ?? "Unknown",
+      abbreviation: r.team?.abbreviation ?? "",
+      logo: pickLogo(r.team?.logos),
+      record: r.recordSummary ?? "",
+      trend: r.trend,
+    }))
+    const week = ap.headline?.match(/Week\s+\d+/i)?.[0]
+    return {
+      id,
+      title,
+      subtitle: week ? `AP Top 25 · ${week}` : "AP Top 25",
+      kind: "poll",
+      category,
+      groups: [{ rows }],
     }
-
-    const teams: MLBStandingTeam[] = []
-    for (const record of data.records ?? []) {
-      const divId = record.division?.id ?? 0
-      const division = divisionNames[divId] ?? record.division?.nameShort ?? "Unknown"
-      for (const tr of record.teamRecords ?? []) {
-        const teamId = tr.team?.id ?? 0
-        teams.push({
-          teamId,
-          name: tr.team?.name ?? "Unknown",
-          shortName: tr.team?.teamName ?? tr.team?.clubName ?? tr.team?.abbreviation ?? "???",
-          abbreviation: tr.team?.abbreviation ?? "???",
-          division,
-          wins: tr.wins ?? 0,
-          losses: tr.losses ?? 0,
-          pct: tr.winningPercentage ?? ".000",
-          gb: tr.gamesBack ?? "-",
-          logo: teamId ? `https://www.mlbstatic.com/team-logos/${teamId}.svg` : "",
-        })
-      }
-    }
-    return teams
   } catch {
-    return []
+    return null
   }
+}
+
+async function fetchConferenceBoard(
+  id: "nfl" | "nba",
+  title: string,
+  url: string,
+  category: LeagueCategory,
+  perConference: number,
+): Promise<StandingsBoard | null> {
+  try {
+    const res = await fetch(url, BOARD_FETCH_INIT)
+    if (!res.ok) return null
+    const data = (await res.json()) as {
+      children?: {
+        name?: string
+        abbreviation?: string
+        standings?: {
+          entries?: {
+            team?: EspnBoardTeam
+            stats?: { name?: string; displayValue?: string; value?: number }[]
+          }[]
+        }
+      }[]
+    }
+    const groups: StandingsGroup[] = []
+    for (const conf of data.children ?? []) {
+      const entries = (conf.standings?.entries ?? []).map((e) => {
+        const stat = (name: string) => e.stats?.find((s) => s.name === name)
+        return {
+          seed: stat("playoffSeed")?.value ?? 99,
+          row: {
+            rank: 0,
+            name: e.team?.shortDisplayName ?? e.team?.displayName ?? "Unknown",
+            abbreviation: e.team?.abbreviation ?? "",
+            logo: pickLogo(e.team?.logos),
+            record: stat("overall")?.displayValue ?? "",
+            pct: stat("winPercent")?.displayValue,
+            gb: stat("gamesBehind")?.displayValue,
+            streak: stat("streak")?.displayValue,
+          } as StandingsRow,
+        }
+      })
+      entries.sort((a, b) => a.seed - b.seed)
+      const rows = entries.slice(0, perConference).map((e, i) => ({ ...e.row, rank: i + 1 }))
+      if (rows.length) groups.push({ label: conf.name ?? conf.abbreviation, rows })
+    }
+    if (groups.length === 0) return null
+    return { id, title, subtitle: "Top seeds by conference", kind: "standings", category, groups }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Top standings for the most-followed leagues that are actually in season right
+ * now. A league drops off the page the day its season window closes, so this
+ * adapts without any manual switching.
+ */
+export async function getTopStandings(now: Date = new Date()): Promise<StandingsBoard[]> {
+  const inFootball = isCategoryInSeason("Football", now)
+  const inBasketball = isCategoryInSeason("Basketball", now)
+  const boards = await Promise.all([
+    inFootball
+      ? fetchPollBoard(
+          "cfb",
+          "College Football",
+          "https://site.api.espn.com/apis/site/v2/sports/football/college-football/rankings",
+          "Football",
+        )
+      : null,
+    inFootball
+      ? fetchConferenceBoard(
+          "nfl",
+          "NFL",
+          "https://site.api.espn.com/apis/v2/sports/football/nfl/standings",
+          "Football",
+          5,
+        )
+      : null,
+    inBasketball
+      ? fetchConferenceBoard(
+          "nba",
+          "NBA",
+          "https://site.api.espn.com/apis/v2/sports/basketball/nba/standings",
+          "Basketball",
+          5,
+        )
+      : null,
+    inBasketball
+      ? fetchPollBoard(
+          "ncaam",
+          "College Basketball",
+          "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/rankings",
+          "Basketball",
+        )
+      : null,
+  ])
+  return boards.filter((b): b is StandingsBoard => b !== null)
 }
 
 export interface SportsData {
@@ -1092,14 +1214,14 @@ export interface SportsData {
   statcast: StatcastHighlight[]
   f1Standings: { drivers: F1Driver[]; constructors: F1Constructor[] }
   pgaLeaderboard: PGAPlayer[]
-  mlbStandings: MLBStandingTeam[]
+  standingsBoards: StandingsBoard[]
   fetchedAt: string
 }
 
 const MAX_SOCCER_GAMES_PER_LEAGUE = 24
 
 export async function getTodaysGames(): Promise<SportsData> {
-  const [results, news, statcast, f1Standings, pgaLeaderboard, mlbStandings] = await Promise.all([
+  const [results, news, statcast, f1Standings, pgaLeaderboard, standingsBoards] = await Promise.all([
     Promise.all(LEAGUES.map((league) => {
       if (league.id === "aaa") return fetchStormChasers()
       if (league.id === "mlb") return fetchMLBGames()
@@ -1110,7 +1232,7 @@ export async function getTodaysGames(): Promise<SportsData> {
     getStatcastHighlights(),
     getF1Standings(),
     getPGALeaderboard(),
-    getMLBStandings(),
+    getTopStandings(),
   ])
   // Stamp isToday: compare each game's date against today's YYYYMMDD string
   // so the client can sort/filter without re-parsing dates in multiple places.
@@ -1142,5 +1264,5 @@ export async function getTodaysGames(): Promise<SportsData> {
     }
   }
   const games = stamped.filter((g) => g.category !== "Soccer" || kept.has(g))
-  return { games, news, statcast, f1Standings, pgaLeaderboard, mlbStandings, fetchedAt: new Date().toISOString() }
+  return { games, news, statcast, f1Standings, pgaLeaderboard, standingsBoards, fetchedAt: new Date().toISOString() }
 }
