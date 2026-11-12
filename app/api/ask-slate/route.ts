@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, tool, createUIMessageStreamResponse, convertToModelMessages } from 'ai'
+import { streamText, stepCountIs, tool, createUIMessageStreamResponse, convertToModelMessages, type UIMessage } from 'ai'
 import { z } from 'zod'
 import { getTodaysGames } from '@/lib/espn'
 import { getGameVibe } from '@/lib/game-vibe'
@@ -249,27 +249,49 @@ export async function POST(req: Request) {
 
           const scopeLabel = targetSites ? targetSites.join(', ') : 'the open web'
 
-          try {
-            const searchUrl = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=8${freshnessParam}`
-            const res = await fetch(searchUrl, {
+          const unverifiedFallback = `I could not verify that detail right now, so don't state it as confirmed. Tell the user plainly that you couldn't verify "${query}" at the moment, and do not mention a search outage, an error, or any tooling problem. Still answer everything you can from the live schedule and score context in your instructions (matchups, times, scores, broadcasts, venues, game vibe) and from your own general knowledge, labeling anything that may have changed recently as unconfirmed. Today's date: ${now.toLocaleDateString()}.`
+
+          const apiKey = process.env.BRAVE_SEARCH_API_KEY
+          if (!apiKey) {
+            console.error(
+              '[Ask Slate] BRAVE_SEARCH_API_KEY is not set. Add it to the Vercel project environment variables; web search is being skipped.',
+            )
+            return unverifiedFallback
+          }
+
+          type BraveResponse = {
+            web?: {
+              results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
+            }
+          }
+
+          const callBrave = (q: string, freshness: string) =>
+            fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=8${freshness}`, {
               headers: {
                 'Accept': 'application/json',
                 'Accept-Encoding': 'gzip',
-                'X-Subscription-Token': process.env.BRAVE_SEARCH_API_KEY ?? '',
+                'X-Subscription-Token': apiKey,
               },
               next: { revalidate: 60 },
             })
 
-            if (!res.ok) {
-              // Graceful fallback: tell the model what sources to reference.
-              return `Web search unavailable. For "${query}", I'd recommend checking: ${scopeLabel} directly. Today's date: ${now.toLocaleDateString()}.`
-            }
+          try {
+            let res = await callBrave(searchQuery, freshnessParam)
 
-            const data = await res.json() as {
-              web?: {
-                results?: { title?: string; description?: string; url?: string; age?: string; profile?: { name?: string } }[]
+            if (!res.ok) {
+              console.error(`[Ask Slate] Brave search failed with status ${res.status}: ${await res.text().catch(() => '<unreadable body>')}`)
+
+              // Retry once with the plain query: no site: filter and no freshness param.
+              res = await callBrave(query, '')
+              if (!res.ok) {
+                console.error(
+                  `[Ask Slate] Brave search retry (no site filter, no freshness) failed with status ${res.status}: ${await res.text().catch(() => '<unreadable body>')}`,
+                )
+                return unverifiedFallback
               }
             }
+
+            const data = (await res.json()) as BraveResponse
 
             const results = data.web?.results ?? []
             if (results.length === 0) {
@@ -283,12 +305,21 @@ export async function POST(req: Request) {
                   `[${r.profile?.name ?? r.title ?? 'Source'}] ${r.title ?? ''}: ${r.description ?? ''} — ${r.url ?? ''} (${r.age ?? 'recent'})`,
               )
               .join('\n\n')
-          } catch {
-            return `Search unavailable. Check ESPN, The Athletic, or X for the latest on "${query}".`
+          } catch (error) {
+            console.error('[Ask Slate] Brave search request threw:', error)
+            return unverifiedFallback
           }
         },
       }),
     }
+
+    // Send only the last 10 UI messages of the conversation to the model. The
+    // legacy { question } shape (or messages without `parts`) falls back to prompt.
+    const lastTen = body.question ? [] : (body.messages ?? []).slice(-10)
+    const recentMessages =
+      lastTen.length > 0 && lastTen.every((m) => Array.isArray(m.parts))
+        ? await convertToModelMessages(lastTen as unknown as UIMessage[], { ignoreIncompleteToolCalls: true })
+        : null
 
     const result = streamText({
       model: MODEL,
@@ -324,7 +355,7 @@ ${seasonalContext}
 
 Current live schedule context:
 ${scheduleContext}`,
-      prompt: question,
+      ...(recentMessages ? { messages: recentMessages } : { prompt: question }),
     })
 
     // createUIMessageStreamResponse is the correct v7 standalone API.
